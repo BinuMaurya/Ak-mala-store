@@ -88,6 +88,18 @@ interface StoredOrder {
 
 app.use(express.json({ limit: '32kb' }));
 
+app.get('/api/plugins/status', (_request: Request, response: Response) => {
+  response.json({
+    gemini: Boolean(process.env.GEMINI_API_KEY),
+    supabase: Boolean(
+      process.env.SUPABASE_URL &&
+      process.env.SUPABASE_ANON_KEY &&
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    ),
+    razorpay: Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET)
+  });
+});
+
 app.post('/api/assistant/chat', async (request: Request, response: Response) => {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {

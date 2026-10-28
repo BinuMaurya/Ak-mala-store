@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Product, MediaItem, VideoItem } from '../../types';
 import { MediaGalleryPickerModal } from './MediaGalleryPickerModal';
@@ -25,7 +25,13 @@ import {
   FolderPlus,
   ExternalLink,
   Film,
-  RefreshCw
+  RefreshCw,
+  Plug,
+  CreditCard,
+  Database,
+  Bot,
+  BarChart3,
+  AlertCircle
 } from 'lucide-react';
 
 export const AdminPanelModal: React.FC = () => {
@@ -52,7 +58,32 @@ export const AdminPanelModal: React.FC = () => {
     showNotification
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'media_studio' | 'murti' | 'products' | 'offers' | 'videos' | 'gallery'>('media_studio');
+  const [activeTab, setActiveTab] = useState<'media_studio' | 'murti' | 'products' | 'offers' | 'videos' | 'gallery' | 'plugins'>('media_studio');
+  const [pluginStatus, setPluginStatus] = useState<{ gemini: boolean; supabase: boolean; razorpay: boolean } | null>(null);
+  const [pluginStatusError, setPluginStatusError] = useState(false);
+  const [pluginRefresh, setPluginRefresh] = useState(0);
+
+  useEffect(() => {
+    if (activeTab !== 'plugins') return;
+
+    let isCurrent = true;
+    setPluginStatusError(false);
+    fetch('/api/plugins/status')
+      .then((response) => {
+        if (!response.ok) throw new Error('Could not load plugin status.');
+        return response.json() as Promise<{ gemini: boolean; supabase: boolean; razorpay: boolean }>;
+      })
+      .then((status) => {
+        if (isCurrent) setPluginStatus(status);
+      })
+      .catch(() => {
+        if (isCurrent) setPluginStatusError(true);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [activeTab, pluginRefresh]);
 
   // Universal local file upload reader helper
   const handleLocalFileUpload = (
@@ -301,6 +332,7 @@ export const AdminPanelModal: React.FC = () => {
             { id: 'offers', label: '3. Offers & Coupons', icon: Tag },
             { id: 'videos', label: `4. Videos (${videosList.length})`, icon: Video },
             { id: 'gallery', label: `5. 1,000+ Gallery (${galleryItems.length})`, icon: Layers },
+            { id: 'plugins', label: 'Plugins', icon: Plug },
           ].map((tab) => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
@@ -330,6 +362,99 @@ export const AdminPanelModal: React.FC = () => {
               onOpenGalleryPicker={openGalleryPicker}
               onSwitchTab={setActiveTab}
             />
+          )}
+
+          {activeTab === 'plugins' && (
+            <div className="space-y-6">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h4 className="font-cinzel text-base font-bold text-white mb-1">Plugins Manager</h4>
+                  <p className="text-xs text-gray-400">Integration readiness is checked on the server. Secret values are never sent to this page.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPluginStatus(null);
+                    setPluginRefresh((refresh) => refresh + 1);
+                  }}
+                  className="flex items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-gray-200 hover:bg-white/10"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Refresh status
+                </button>
+              </div>
+
+              {pluginStatusError && (
+                <div role="status" className="flex items-center gap-2 border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  Could not read integration status. Confirm the store server is running, then refresh.
+                </div>
+              )}
+
+              {!pluginStatus && !pluginStatusError && (
+                <p className="text-xs text-gray-400" role="status">Checking server configuration...</p>
+              )}
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {[
+                  {
+                    name: 'Supabase',
+                    description: 'Store database, orders, and server-side analytics storage.',
+                    icon: Database,
+                    ready: pluginStatus?.supabase,
+                    variables: 'SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY'
+                  },
+                  {
+                    name: 'Razorpay',
+                    description: 'Online checkout and payment verification.',
+                    icon: CreditCard,
+                    ready: pluginStatus?.razorpay,
+                    variables: 'RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET'
+                  },
+                  {
+                    name: 'Google Gemini',
+                    description: 'AI-powered Store Assistant responses.',
+                    icon: Bot,
+                    ready: pluginStatus?.gemini,
+                    variables: 'GEMINI_API_KEY'
+                  },
+                  {
+                    name: 'Consent Analytics',
+                    description: 'Anonymous store events are recorded only after a visitor accepts analytics consent.',
+                    icon: BarChart3,
+                    ready: pluginStatus?.supabase,
+                    variables: 'Requires Supabase configuration and visitor consent'
+                  }
+                ].map((plugin) => {
+                  const Icon = plugin.icon;
+                  const ready = plugin.ready;
+                  return (
+                    <article key={plugin.name} className="border border-white/10 bg-white/[0.03] p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-9 w-9 items-center justify-center border border-amber-400/25 bg-amber-400/10 text-amber-200">
+                            <Icon className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <h5 className="text-sm font-bold text-white">{plugin.name}</h5>
+                            <span className={`text-[10px] font-bold uppercase ${ready === undefined ? 'text-gray-400' : ready ? 'text-emerald-300' : 'text-amber-300'}`}>
+                              {ready === undefined ? 'Status unavailable' : ready ? 'Configured' : 'Setup required'}
+                            </span>
+                          </div>
+                        </div>
+                        {ready !== undefined && (ready
+                          ? <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+                          : <AlertCircle className="h-4 w-4 text-amber-300" />)}
+                      </div>
+                      <p className="mt-3 text-xs leading-5 text-gray-400">{plugin.description}</p>
+                      <p className="mt-3 border-t border-white/10 pt-3 text-[10px] leading-4 text-gray-500">
+                        Server environment: <span className="text-gray-300">{plugin.variables}</span>
+                      </p>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
           )}
 
           {/* TAB 1: MURTI & HERO ASSETS */}
