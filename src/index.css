@@ -1,0 +1,133 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --gold-primary: #D4AF37;
+    --gold-light: #F3E5AB;
+    --gold-accent: #E5C158;
+    --bg-dark: #030712;
+    --bg-card: rgba(17, 24, 39, 0.7);
+  }
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  background-color: #030712;
+  color: #f3f4f6;
+}
+
+.font-cinzel {
+  font-family: 'Cinzel', serif;
+}
+
+.font-playfair {
+  font-family: 'Playfair Display', serif;
+}
+
+.font-devanagari {
+  font-family: 'Tiro Devanagari Hindi', serif;
+}
+
+/* Luxury Glassmorphism & Gold Glows */
+.gold-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(212, 175, 55, 0.22);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.gold-card-hover {
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.gold-card-hover:hover {
+  transform: translateY(-4px);
+  border-color: rgba(229, 193, 88, 0.65);
+  box-shadow: 0 12px 30px -10px rgba(212, 175, 55, 0.25);
+}
+
+.gold-glow {
+  box-shadow: 0 0 25px -5px rgba(212, 175, 55, 0.4);
+}
+
+.gold-text-gradient {
+  background: linear-gradient(135deg, #FFF6D6 0%, #E5C158 45%, #D4AF37 75%, #AA771C 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gold-gradient-bg {
+  background: linear-gradient(135deg, #D4AF37 0%, #E5C158 50%, #B8860B 100%);
+}
+
+.gold-gradient-border {
+  border-image: linear-gradient(to right, #AA771C, #F3E5AB, #D4AF37) 1;
+}
+
+/* Diya Flicker Animation */
+@keyframes flicker {
+  0%, 100% {
+    transform: scale(1) translateY(0);
+    opacity: 0.95;
+    filter: drop-shadow(0 0 8px #f59e0b);
+  }
+  25% {
+    transform: scale(1.06) translateY(-1px);
+    opacity: 1;
+    filter: drop-shadow(0 0 14px #fbbf24);
+  }
+  50% {
+    transform: scale(0.96) translateY(1px);
+    opacity: 0.9;
+    filter: drop-shadow(0 0 7px #ea580c);
+  }
+  75% {
+    transform: scale(1.04) translateY(-0.5px);
+    opacity: 0.98;
+    filter: drop-shadow(0 0 12px #f59e0b);
+  }
+}
+
+.animate-diya {
+  animation: flicker 2s infinite ease-in-out;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: #030712;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2a2010;
+  border-radius: 4px;
+  border: 1px solid rgba(212, 175, 55, 0.3);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #D4AF37;
+}
+
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+
+  #shipping-slip,
+  #shipping-slip * {
+    visibility: visible !important;
+  }
+
+  #shipping-slip {
+    position: fixed;
+    inset: 0;
+    display: block !important;
+    overflow: visible;
+    background: #fff;
+    color: #000;
+  }
+}
