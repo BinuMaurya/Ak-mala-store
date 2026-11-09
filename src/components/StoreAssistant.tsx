@@ -1,5 +1,6 @@
 import React, { FormEvent, useEffect, useRef, useState } from 'react';
 import { MessageCircle, Send, Sparkles, X } from 'lucide-react';
+import { useApp } from '../context/AppContext';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -12,6 +13,7 @@ const welcomeMessage: ChatMessage = {
 };
 
 export const StoreAssistant: React.FC = () => {
+  const { cart, selectedProductForDetail } = useApp();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([welcomeMessage]);
   const [draft, setDraft] = useState('');
@@ -42,7 +44,15 @@ export const StoreAssistant: React.FC = () => {
           messages: nextMessages.slice(-10).map(({ role, text: messageText }) => ({
             role,
             text: messageText
-          }))
+          })),
+          context: {
+            currentProductId: selectedProductForDetail?.id,
+            cart: cart.map(({ productId, selectedSize, quantity }) => ({
+              productId,
+              selectedSize,
+              quantity
+            }))
+          }
         })
       });
       const result = await response.json() as { reply?: string; error?: string };

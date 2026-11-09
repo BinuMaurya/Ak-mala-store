@@ -26,6 +26,24 @@ security enabled with no public policies; only the server accesses them.
 5. Configure Razorpay separately using the server-side variables in
    `.env.example`.
 
+## Run checkout locally
+
+1. Copy `.env.example` to `.env` in the project root.
+2. Fill in `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and
+   `SUPABASE_SERVICE_ROLE_KEY` from the Supabase project. The payment and COD
+   checkout APIs need these server-side values to save orders.
+3. In the Razorpay Dashboard, enable Test Mode and copy its API Key ID and Key
+   Secret into `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET`. Never put the Key
+   Secret in a `VITE_*` variable or share it in chat.
+4. Run `npm run dev`, then open `http://localhost:3000` in the browser. Do not
+   open `index.html` directly; `file://` cannot load the app modules or its
+   payment API.
+5. Complete checkout using Razorpay's test-mode flow. Switch to live credentials
+   only after the merchant account is activated for live payments.
+
+Restart `npm run dev` after changing `.env`. The checkout reports a configuration
+error until both Supabase and Razorpay are configured.
+
 `ADMIN_EMAILS` is a comma-separated allowlist of verified owner email
 addresses. Only those accounts can read orders or analytics. The dashboard
 authenticates with Supabase email OTP and the server checks each request.

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { DotLottieReact } from '@lottiefiles/dotlottie-react';
 import { useApp } from '../../context/AppContext';
 import confetti from 'canvas-confetti';
 import { startRazorpayCheckout } from '../../services/razorpay';
@@ -437,23 +438,35 @@ export const CheckoutModal: React.FC = () => {
 
         {/* Sticky Proceed to Pay Button */}
         <div className="p-4 border-t border-white/10 bg-[#060a14]">
-          <button
-            onClick={handlePay}
-            disabled={isProcessing}
-            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black font-black text-xs uppercase tracking-wider shadow-lg hover:opacity-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-          >
-            {isProcessing ? (
-              <span className="flex items-center gap-2">
-                <span className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                Connecting to Secure Gateway...
-              </span>
-            ) : (
-              <>
-                <span>PROCEED TO PAY ₹{finalTotal}</span>
-                <ArrowRight className="w-4 h-4" />
-              </>
-            )}
-          </button>
+          {isProcessing ? (
+            <div
+              className="flex items-center justify-center gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/5 py-2"
+              role="status"
+              aria-live="polite"
+            >
+              <DotLottieReact
+                src="/animations/shopping-checkout.lottie"
+                autoplay
+                loop
+                aria-hidden="true"
+                style={{ width: 88, height: 66 }}
+              />
+              <div>
+                <p className="text-xs font-bold text-amber-100">Processing your order...</p>
+                <p className="mt-1 text-[10px] text-gray-400">
+                  Please wait while we securely confirm it.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={handlePay}
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black font-black text-xs uppercase tracking-wider shadow-lg hover:opacity-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <span>PROCEED TO PAY ₹{finalTotal}</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
       </div>

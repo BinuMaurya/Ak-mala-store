@@ -107,7 +107,7 @@ app.post('/api/assistant/chat', async (request: Request, response: Response) => 
     return;
   }
 
-  const body = request.body as { messages?: unknown };
+  const body = request.body as { messages?: unknown; context?: unknown };
   if (
     !Array.isArray(body?.messages) ||
     body.messages.length < 1 ||
@@ -128,6 +128,35 @@ app.post('/api/assistant/chat', async (request: Request, response: Response) => 
     return;
   }
 
+  const context = body.context && typeof body.context === 'object' && !Array.isArray(body.context)
+    ? body.context as Record<string, unknown>
+    : {};
+  const currentProduct = typeof context.currentProductId === 'string'
+    ? products.find((product) => product.id === context.currentProductId)
+    : undefined;
+  const cartContext = Array.isArray(context.cart)
+    ? context.cart.slice(0, 20).flatMap((line) => {
+      if (!line || typeof line !== 'object' || Array.isArray(line)) return [];
+      const item = line as Record<string, unknown>;
+      if (
+        typeof item.productId !== 'string' ||
+        typeof item.selectedSize !== 'string' ||
+        typeof item.quantity !== 'number' ||
+        !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > maxCartItems
+      ) return [];
+
+      const product = products.find((candidate) => candidate.id === item.productId);
+      const size = product?.availableSizes.find((option) => option.size === item.selectedSize);
+      return product && size
+        ? [{ name: product.name, size: size.size, quantity: item.quantity }]
+        : [];
+    })
+    : [];
+  const shoppingContext = {
+    currentProduct: currentProduct ? { name: currentProduct.name, category: currentProduct.category } : null,
+    cart: cartContext
+  };
+
   const catalogue = products.map((product) => ({
     name: product.name,
     category: product.category,
@@ -146,9 +175,11 @@ app.post('/api/assistant/chat', async (request: Request, response: Response) => 
     'Answer product questions using only this product catalogue; do not invent products, prices, sizes, stock, or delivery promises.',
     'For shipping and order-specific information, explain that delivery timing depends on the destination and direct customers to Track Order or store support when needed.',
     'Never ask customers to provide payment credentials, OTPs, or sensitive personal information in chat.',
+    'Use the provided shopping context only to make relevant suggestions. Never claim access to other browsing activity, and never pressure customers to order.',
     'Reply in the same language as the customer, including English, Hindi, Marathi, or Gujarati.',
     'Keep answers warm, concise, and useful. If a fact is not in the catalogue or store information, say so clearly.',
-    `Product catalogue: ${JSON.stringify(catalogue)}`
+    `Product catalogue: ${JSON.stringify(catalogue)}`,
+    `Current shopping context: ${JSON.stringify(shoppingContext)}`
   ].join('\n');
 
   try {
