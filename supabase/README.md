@@ -15,23 +15,25 @@ security enabled with no public policies; only the server accesses them.
    ```env
    SUPABASE_URL=https://YOUR_PROJECT.supabase.co
    SUPABASE_ANON_KEY=YOUR_PUBLIC_ANON_KEY
-   SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVER_ONLY_SERVICE_ROLE_KEY
+   SUPABASE_SECRET_KEY=YOUR_SERVER_ONLY_SECRET_KEY
    ADMIN_EMAILS=owner@example.com
    VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
    VITE_SUPABASE_ANON_KEY=YOUR_PUBLIC_ANON_KEY
    ```
 
 4. Configure the same variables as server-side secrets in production. Never
-   put `SUPABASE_SERVICE_ROLE_KEY` in a `VITE_*` variable or browser code.
+   put `SUPABASE_SECRET_KEY` or `SUPABASE_SERVICE_ROLE_KEY` in a `VITE_*`
+   variable or browser code. Legacy `SUPABASE_SERVICE_ROLE_KEY` is also supported.
 5. Configure Razorpay separately using the server-side variables in
    `.env.example`.
 
 ## Run checkout locally
 
 1. Copy `.env.example` to `.env` in the project root.
-2. Fill in `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and
-   `SUPABASE_SERVICE_ROLE_KEY` from the Supabase project. The payment and COD
-   checkout APIs need these server-side values to save orders.
+2. Fill in `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SECRET_KEY` from
+   the Supabase project. The payment and COD checkout APIs need these server-side
+   values to save orders. The legacy `service_role` key can be used as
+   `SUPABASE_SERVICE_ROLE_KEY` if needed.
 3. In the Razorpay Dashboard, enable Test Mode and copy its API Key ID and Key
    Secret into `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET`. Never put the Key
    Secret in a `VITE_*` variable or share it in chat.

@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { DotLottieReact } from '@lottiefiles/dotlottie-react';
 import { useApp } from '../../context/AppContext';
 import confetti from 'canvas-confetti';
 import { startRazorpayCheckout } from '../../services/razorpay';
@@ -444,12 +443,9 @@ export const CheckoutModal: React.FC = () => {
               role="status"
               aria-live="polite"
             >
-              <DotLottieReact
-                src="/animations/shopping-checkout.lottie"
-                autoplay
-                loop
+              <span
+                className="h-8 w-8 shrink-0 animate-spin rounded-full border-2 border-amber-500/25 border-t-amber-300"
                 aria-hidden="true"
-                style={{ width: 88, height: 66 }}
               />
               <div>
                 <p className="text-xs font-bold text-amber-100">Processing your order...</p>

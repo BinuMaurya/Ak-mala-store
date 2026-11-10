@@ -47,8 +47,17 @@ export function trackEvent(eventType: AnalyticsEventType, productId?: string): v
     })
   }).then(async (response) => {
     if (!response.ok) {
-      const result = await response.json() as { error?: string };
-      throw new Error(result.error || 'Analytics event was rejected.');
+      const responseText = await response.text();
+      let message = '';
+      if (responseText) {
+        try {
+          const result = JSON.parse(responseText) as { error?: string };
+          message = result.error || '';
+        } catch {
+          message = responseText;
+        }
+      }
+      throw new Error(message || `Analytics event was rejected (${response.status}).`);
     }
   }).catch((error: unknown) => {
     console.error('Could not record consented analytics event:', error);

@@ -94,7 +94,7 @@ app.get('/api/plugins/status', (_request: Request, response: Response) => {
     supabase: Boolean(
       process.env.SUPABASE_URL &&
       process.env.SUPABASE_ANON_KEY &&
-      process.env.SUPABASE_SERVICE_ROLE_KEY
+      (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)
     ),
     razorpay: Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET)
   });
@@ -207,9 +207,9 @@ app.post('/api/assistant/chat', async (request: Request, response: Response) => 
 function getSupabaseCredentials() {
   const url = process.env.SUPABASE_URL;
   const anonKey = process.env.SUPABASE_ANON_KEY;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const serviceRoleKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !anonKey || !serviceRoleKey) {
-    throw new Error('Supabase is not configured. Add the server-side Supabase variables before accepting orders.');
+    throw new Error('Supabase is not configured. Add the server-side Supabase secret key before accepting orders.');
   }
   return { url: url.replace(/\/$/, ''), anonKey, serviceRoleKey };
 }
@@ -242,8 +242,13 @@ async function supabaseRequest<T>(
     console.error('Supabase database request failed:', result.status, details);
     throw new GatewayError('The order could not be saved. Please contact the store before retrying payment.');
   }
-  if (result.status === 204) return undefined as T;
-  return (await result.json()) as T;
+  const responseText = await result.text();
+  if (!responseText) return undefined as T;
+  try {
+    return JSON.parse(responseText) as T;
+  } catch {
+    throw new GatewayError('The order database returned an invalid response. Please try again.');
+  }
 }
 
 function parseCheckoutCustomer(input: unknown): CheckoutCustomer {
@@ -577,7 +582,11 @@ app.post('/api/analytics/events', async (request: Request, response: Response) =
     response.status(204).end();
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to record the analytics event.';
-    const status = message.startsWith('Supabase is not configured') ? 503 : 400;
+    const status = message.startsWith('Supabase is not configured')
+      ? 503
+      : error instanceof GatewayError
+        ? 502
+        : 400;
     if (status !== 400) console.error(message);
     response.status(status).json({ error: message });
   }
