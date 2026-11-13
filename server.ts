@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import express, { type Request, type Response } from 'express';
 import { GoogleGenAI } from '@google/genai';
-import { products } from './src/data/products';
+import { products } from './src/data/products.js';
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
