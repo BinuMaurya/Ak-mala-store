@@ -3,7 +3,6 @@ import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import {
   PerformanceMonitor,
-  OrbitControls,
   useTexture
 } from '@react-three/drei';
 import { useApp } from '../../context/AppContext';
@@ -330,26 +329,12 @@ export const GaneshaViewer: React.FC<GaneshaViewerProps> = ({
           />
           <FloatingPetals count={50} show={showPetals} />
 
-          {/* Smooth OrbitControls for 360° rotation */}
-          <OrbitControls
-            enablePan={false}
-            enableRotate={false}
-            enableZoom
-            minDistance={2.5}
-            maxDistance={7.5}
-            minPolarAngle={Math.PI * 0.2}
-            maxPolarAngle={Math.PI * 0.65}
-            dampingFactor={0.05}
-          />
         </Canvas>
 
         {/* Top Left 360° Drag Indicator Pill */}
         <div className="absolute top-4 left-4 z-10 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/65 border border-[#D4AF37]/45 backdrop-blur-md text-xs text-amber-200">
           <Rotate3D className="w-3.5 h-3.5 text-[#E5C158]" />
           <span className="font-semibold tracking-wide">Ganpati Bappa • Murti Darshan</span>
-          <span className="text-[10px] text-amber-400/80 border-l border-amber-500/30 pl-2">
-            Scroll to Zoom
-          </span>
         </div>
 
         {/* Top Right Petal Control */}

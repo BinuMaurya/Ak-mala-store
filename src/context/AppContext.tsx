@@ -131,6 +131,7 @@ interface AppContextType {
   setIsReviewOpen: (open: boolean) => void;
   isAdminOpen: boolean;
   setIsAdminOpen: (open: boolean) => void;
+  isOwner: boolean;
   isGalleryOpen: boolean;
   setIsGalleryOpen: (open: boolean) => void;
 
@@ -250,6 +251,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
 
   // User & Orders
@@ -327,16 +329,57 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     if (!supabase) return;
     let isActive = true;
-    const syncUser = (session: Session | null) => {
+    let verificationSequence = 0;
+    const syncSession = async (session: Session | null) => {
+      const currentSequence = ++verificationSequence;
       if (!isActive) return;
       setUser(session?.user ? {
         name: session.user.user_metadata.full_name || session.user.email || 'AK MALA Customer',
         phone: '',
         email: session.user.email
       } : null);
+      setIsOwner(false);
+      if (!session) {
+        setIsAdminOpen(false);
+        setIsDashboardOpen(false);
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/admin/access', {
+          headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+        const accessResult = await response.json() as { authorized?: boolean; error?: string };
+        if (!isActive || currentSequence !== verificationSequence) return;
+        const authorized = response.ok && accessResult.authorized === true;
+        setIsOwner(authorized);
+        if (!authorized) {
+          setIsAdminOpen(false);
+          setIsDashboardOpen(false);
+          if (response.status >= 500 || response.ok) {
+            console.error('Owner access verification failed:', accessResult.error || response.status);
+          }
+        }
+      } catch (error) {
+        if (!isActive || currentSequence !== verificationSequence) return;
+        setIsOwner(false);
+        setIsAdminOpen(false);
+        setIsDashboardOpen(false);
+        console.error('Owner access verification could not reach the server:', error);
+      }
     };
-    void supabase.auth.getSession().then(({ data }) => syncUser(data.session));
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => syncUser(session));
+    void supabase.auth.getSession().then(({ data, error }) => {
+      if (error) {
+        console.error('Could not restore the signed-in user:', error);
+        return;
+      }
+      void syncSession(data.session);
+    }).catch((error: unknown) => {
+      console.error('Could not restore the signed-in user:', error);
+    });
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      void syncSession(session);
+    });
     return () => {
       isActive = false;
       authListener.subscription.unsubscribe();
@@ -664,6 +707,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsReviewOpen,
         isAdminOpen,
         setIsAdminOpen,
+        isOwner,
         isGalleryOpen,
         setIsGalleryOpen,
         user,

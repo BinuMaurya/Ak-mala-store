@@ -17,6 +17,9 @@ create table if not exists public.orders (
   payment_status text not null check (payment_status in ('paid', 'pending')),
   order_status text not null default 'confirmed'
     check (order_status in ('confirmed', 'packed', 'shipped', 'out_for_delivery', 'delivered')),
+  delivery_otp_hash text,
+  delivery_otp_expires_at timestamptz,
+  delivery_otp_attempts smallint not null default 0 check (delivery_otp_attempts between 0 and 5),
   created_at timestamptz not null default now()
 );
 

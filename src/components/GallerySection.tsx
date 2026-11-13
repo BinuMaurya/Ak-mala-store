@@ -27,6 +27,7 @@ import {
 export const GallerySection: React.FC = () => {
   const {
     galleryItems,
+    isOwner,
     deleteGalleryItem,
     bulkSeed1000Items,
     setIsAdminOpen,
@@ -106,7 +107,7 @@ export const GallerySection: React.FC = () => {
 
           {/* Quick Actions (Admin Add & 1000+ Generator) */}
           <div className="flex flex-wrap items-center gap-2">
-            {galleryItems.length < 500 && (
+            {isOwner && galleryItems.length < 500 && (
               <button
                 onClick={bulkSeed1000Items}
                 className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-700/20 border border-amber-400/40 text-amber-300 text-xs font-bold hover:bg-amber-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
@@ -116,13 +117,15 @@ export const GallerySection: React.FC = () => {
               </button>
             )}
 
-            <button
-              onClick={() => setIsAdminOpen(true)}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black text-xs font-black uppercase tracking-wider shadow-md hover:scale-105 transition-all flex items-center gap-1.5 cursor-pointer"
-            >
-              <PlusCircle className="w-3.5 h-3.5" />
-              <span>Admin: Add Photo/Video</span>
-            </button>
+            {isOwner && (
+              <button
+                onClick={() => setIsAdminOpen(true)}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black text-xs font-black uppercase tracking-wider shadow-md hover:scale-105 transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>Admin: Add Photo/Video</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -365,7 +368,7 @@ export const GallerySection: React.FC = () => {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                {activeLightboxItem.type === 'image' && (
+                {isOwner && activeLightboxItem.type === 'image' && (
                   <button
                     onClick={() => {
                       updateSiteAssets({ heroGaneshaImage: activeLightboxItem.url });
@@ -402,32 +405,36 @@ export const GallerySection: React.FC = () => {
                   <span>Share</span>
                 </button>
 
-                <button
-                  onClick={() => {
-                    setIsAdminOpen(true);
-                    setActiveLightboxItem(null);
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-amber-300 flex items-center gap-1.5 cursor-pointer"
-                  title="Replace or edit in Admin Media Studio"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Admin Studio</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    if (window.confirm(`Permanently delete "${activeLightboxItem.title}" from Gallery?`)) {
-                      deleteGalleryItem(activeLightboxItem.id);
+                {isOwner && (
+                  <button
+                    onClick={() => {
+                      setIsAdminOpen(true);
                       setActiveLightboxItem(null);
-                      showNotification('Media deleted from gallery successfully.');
-                    }
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-red-600/15 hover:bg-red-600/25 border border-red-500/40 text-red-300 flex items-center gap-1.5 cursor-pointer"
-                  title="Delete this media item"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Delete</span>
-                </button>
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-amber-300 flex items-center gap-1.5 cursor-pointer"
+                    title="Replace or edit in Admin Media Studio"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Admin Studio</span>
+                  </button>
+                )}
+
+                {isOwner && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm(`Permanently delete "${activeLightboxItem.title}" from Gallery?`)) {
+                        deleteGalleryItem(activeLightboxItem.id);
+                        setActiveLightboxItem(null);
+                        showNotification('Media deleted from gallery successfully.');
+                      }
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-red-600/15 hover:bg-red-600/25 border border-red-500/40 text-red-300 flex items-center gap-1.5 cursor-pointer"
+                    title="Delete this media item"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete</span>
+                  </button>
+                )}
 
                 <button
                   onClick={() => showNotification('Devotional image download started!')}

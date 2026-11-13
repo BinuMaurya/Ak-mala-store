@@ -2,9 +2,18 @@ import React, { FormEvent, useEffect, useRef, useState } from 'react';
 import { MessageCircle, Send, Sparkles, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
+interface AssistantProduct {
+  id: string;
+  name: string;
+  image: string;
+  price: number;
+  category: string;
+}
+
 interface ChatMessage {
   role: 'user' | 'assistant';
   text: string;
+  products?: AssistantProduct[];
 }
 
 const welcomeMessage: ChatMessage = {
@@ -13,7 +22,7 @@ const welcomeMessage: ChatMessage = {
 };
 
 export const StoreAssistant: React.FC = () => {
-  const { cart, selectedProductForDetail } = useApp();
+  const { allProducts, cart, selectedProductForDetail, setSelectedProductForDetail } = useApp();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([welcomeMessage]);
   const [draft, setDraft] = useState('');
@@ -55,12 +64,20 @@ export const StoreAssistant: React.FC = () => {
           }
         })
       });
-      const result = await response.json() as { reply?: string; error?: string };
+      const result = await response.json() as {
+        reply?: string;
+        products?: AssistantProduct[];
+        error?: string;
+      };
       if (!response.ok) {
         throw new Error(result.error || 'The assistant could not respond. Please try again.');
       }
       if (!result.reply) throw new Error('The assistant returned an empty response. Please try again.');
-      setMessages((current) => [...current, { role: 'assistant', text: result.reply! }]);
+      setMessages((current) => [...current, {
+        role: 'assistant',
+        text: result.reply!,
+        products: result.products
+      }]);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'The assistant could not respond. Please try again.');
     } finally {
@@ -107,13 +124,45 @@ export const StoreAssistant: React.FC = () => {
             {messages.map((message, index) => (
               <div
                 key={`${index}-${message.role}`}
-                className={`max-w-[88%] whitespace-pre-wrap rounded-2xl px-3 py-2.5 text-sm leading-relaxed ${
-                  message.role === 'user'
-                    ? 'ml-auto rounded-br-md bg-[#D4AF37] text-gray-950'
-                    : 'rounded-bl-md border border-white/10 bg-white/5 text-gray-100'
-                }`}
+                className={`max-w-[95%] rounded-2xl px-3 py-2.5 text-sm leading-relaxed ${
+                  message.role === 'user' ? 'ml-auto bg-[#D4AF37] text-gray-950' : 'border border-white/10 bg-white/5 text-gray-100'
+                } ${message.role === 'user' ? 'rounded-br-md' : 'rounded-bl-md'}`}
               >
-                {message.text}
+                <p className="whitespace-pre-wrap">{message.text}</p>
+                {message.products && message.products.length > 0 && (
+                  <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                    {message.products.map((suggestion) => {
+                      const product = allProducts.find((item) => item.id === suggestion.id);
+                      return (
+                        <button
+                          key={suggestion.id}
+                          type="button"
+                          disabled={!product}
+                          onClick={() => {
+                            if (!product) return;
+                            setSelectedProductForDetail(product);
+                            setIsOpen(false);
+                          }}
+                          className="w-28 shrink-0 overflow-hidden rounded-xl border border-[#D4AF37]/30 bg-black/30 text-left transition-colors hover:border-[#D4AF37] disabled:cursor-default"
+                          aria-label={`View ${suggestion.name}`}
+                        >
+                          <img
+                            src={suggestion.image}
+                            alt={suggestion.name}
+                            loading="lazy"
+                            className="h-24 w-full object-cover"
+                          />
+                          <span className="block truncate px-2 pt-1.5 text-[11px] font-semibold text-white">
+                            {suggestion.name}
+                          </span>
+                          <span className="block px-2 pb-2 text-[11px] text-[#E5C158]">
+                            ₹{suggestion.price.toLocaleString('en-IN')}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             ))}
             {isSending && (

@@ -53,7 +53,7 @@ function escapeCsv(value: string): string {
 }
 
 export const AdminDashboardModal: React.FC = () => {
-  const { isDashboardOpen, setIsDashboardOpen, showNotification, allProducts } = useApp();
+  const { isDashboardOpen, isOwner, setIsDashboardOpen, showNotification, allProducts } = useApp();
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
   const [waitingForOtp, setWaitingForOtp] = useState(false);
@@ -62,6 +62,8 @@ export const AdminDashboardModal: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [printingOrder, setPrintingOrder] = useState<DashboardOrder | null>(null);
+  const [deliveryCodes, setDeliveryCodes] = useState<Record<string, string>>({});
+  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!printingOrder) return;
@@ -138,7 +140,7 @@ export const AdminDashboardModal: React.FC = () => {
     };
   }, [data, allProducts]);
 
-  if (!isDashboardOpen) return null;
+  if (!isDashboardOpen || !isOwner) return null;
 
   const sendOwnerCode = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -181,20 +183,48 @@ export const AdminDashboardModal: React.FC = () => {
 
   const updateStatus = async (order: DashboardOrder, orderStatus: string) => {
     if (!accessToken) return;
+    setUpdatingOrderId(order.id);
     try {
       const response = await fetch(`/api/admin/orders/${encodeURIComponent(order.id)}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({ orderStatus })
       });
-      const result = await response.json() as { order?: DashboardOrder; error?: string };
+      const result = await response.json() as { order?: DashboardOrder; message?: string; error?: string };
       if (!response.ok || !result.order) throw new Error(result.error || 'Order status could not be updated.');
       setData((current) => current && ({
         ...current,
         orders: current.orders.map((item) => item.id === order.id ? result.order! : item)
       }));
+      if (result.message) showNotification(result.message);
     } catch (statusError) {
       showNotification(statusError instanceof Error ? statusError.message : 'Order status could not be updated.');
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  };
+
+  const confirmDelivery = async (order: DashboardOrder) => {
+    if (!accessToken) return;
+    setUpdatingOrderId(order.id);
+    try {
+      const response = await fetch(`/api/admin/orders/${encodeURIComponent(order.id)}/deliver`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ code: deliveryCodes[order.id] || '' })
+      });
+      const result = await response.json() as { order?: DashboardOrder; message?: string; error?: string };
+      if (!response.ok || !result.order) throw new Error(result.error || 'Delivery could not be confirmed.');
+      setData((current) => current && ({
+        ...current,
+        orders: current.orders.map((item) => item.id === order.id ? result.order! : item)
+      }));
+      setDeliveryCodes((current) => ({ ...current, [order.id]: '' }));
+      showNotification(result.message || 'Delivery confirmed.');
+    } catch (deliveryError) {
+      showNotification(deliveryError instanceof Error ? deliveryError.message : 'Delivery could not be confirmed.');
+    } finally {
+      setUpdatingOrderId(null);
     }
   };
 
@@ -347,18 +377,57 @@ export const AdminDashboardModal: React.FC = () => {
                           ₹{order.total.toLocaleString('en-IN')} · {order.payment_method.toUpperCase()} / {order.payment_status.toUpperCase()}
                         </p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <select
-                          aria-label={`Status for ${order.order_number}`}
-                          value={order.order_status}
-                          onChange={(event) => void updateStatus(order, event.target.value)}
-                          className="rounded-lg border border-white/20 bg-[#101827] p-2 text-xs text-white"
-                        >
-                          {orderStatuses.map((status) => <option key={status} value={status}>{status.replaceAll('_', ' ')}</option>)}
-                        </select>
-                        <button onClick={() => setPrintingOrder(order)} className="flex items-center gap-1 rounded-lg bg-amber-400 px-2.5 py-2 font-bold text-black">
-                          <Printer className="h-3.5 w-3.5" /> Slip
-                        </button>
+                      <div className="flex flex-col items-end gap-2">
+                        <div className="flex items-center gap-2">
+                          <select
+                            aria-label={`Status for ${order.order_number}`}
+                            value={order.order_status}
+                            disabled={updatingOrderId === order.id}
+                            onChange={(event) => void updateStatus(order, event.target.value)}
+                            className="rounded-lg border border-white/20 bg-[#101827] p-2 text-xs text-white disabled:opacity-50"
+                          >
+                            {orderStatuses
+                              .filter((status) => status !== 'delivered' || order.order_status === 'delivered')
+                              .map((status) => <option key={status} value={status}>{status.replaceAll('_', ' ')}</option>)}
+                          </select>
+                          <button onClick={() => setPrintingOrder(order)} className="flex items-center gap-1 rounded-lg bg-amber-400 px-2.5 py-2 font-bold text-black">
+                            <Printer className="h-3.5 w-3.5" /> Slip
+                          </button>
+                        </div>
+                        {order.order_status === 'out_for_delivery' && (
+                          <div className="w-full max-w-xs space-y-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-2">
+                            <p className="text-[10px] text-amber-200">Enter the 6-digit delivery OTP shared by the customer/courier.</p>
+                            <div className="flex gap-2">
+                              <input
+                                inputMode="numeric"
+                                autoComplete="one-time-code"
+                                maxLength={6}
+                                aria-label={`Delivery OTP for ${order.order_number}`}
+                                value={deliveryCodes[order.id] || ''}
+                                onChange={(event) => setDeliveryCodes((current) => ({
+                                  ...current,
+                                  [order.id]: event.target.value.replace(/\D/g, '').slice(0, 6)
+                                }))}
+                                className="min-w-0 flex-1 rounded-md border border-white/15 bg-[#101827] px-2 py-1.5 text-xs tracking-[0.3em] text-white"
+                                placeholder="6-digit OTP"
+                              />
+                              <button
+                                onClick={() => void confirmDelivery(order)}
+                                disabled={updatingOrderId === order.id || (deliveryCodes[order.id] || '').length !== 6}
+                                className="rounded-md bg-emerald-500 px-2.5 py-1.5 text-[10px] font-bold text-black disabled:opacity-40"
+                              >
+                                Verify & deliver
+                              </button>
+                            </div>
+                            <button
+                              onClick={() => void updateStatus(order, 'out_for_delivery')}
+                              disabled={updatingOrderId === order.id}
+                              className="text-[10px] text-amber-200 underline disabled:opacity-40"
+                            >
+                              Resend delivery OTP
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </article>

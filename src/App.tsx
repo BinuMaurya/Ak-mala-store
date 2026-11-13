@@ -4,7 +4,7 @@ import { AnnouncementBar } from './components/AnnouncementBar';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { MobileBottomNav } from './components/MobileBottomNav';
-import { Smartphone, Monitor, Sparkles, BarChart3, Layers } from 'lucide-react';
+import { Sparkles, BarChart3 } from 'lucide-react';
 import { AnalyticsConsentNotice } from './components/AnalyticsConsentNotice';
 import { StoreAssistant } from './components/StoreAssistant';
 
@@ -36,10 +36,6 @@ const EasyShoppingExperience = lazy(() =>
 const GallerySection = lazy(() =>
   import('./components/GallerySection').then((module) => ({ default: module.GallerySection }))
 );
-const MobileAppView = lazy(() =>
-  import('./components/MobileAppView').then((module) => ({ default: module.MobileAppView }))
-);
-
 // Lazy loading all heavy modal dialogs
 const AdminPanelModal = lazy(() =>
   import('./components/Admin/AdminPanelModal').then((module) => ({ default: module.AdminPanelModal }))
@@ -80,49 +76,25 @@ const DevotionalFallback: React.FC<{ label?: string }> = ({ label = 'Loading Sac
 );
 
 const MainContent: React.FC = () => {
-  const { notification, setIsDashboardOpen } = useApp();
-  const [viewMode, setViewMode] = useState<'desktop' | 'mobile_simulator'>('desktop');
+  const { notification, isOwner, setIsDashboardOpen } = useApp();
   const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-[#030712] text-gray-100 flex flex-col font-sans selection:bg-[#D4AF37]/30 selection:text-[#E5C158] relative">
       
-      {/* Floating Device Mode Switcher Dock */}
-      <div className="fixed bottom-20 lg:bottom-6 right-4 z-40 flex items-center p-1.5 rounded-2xl bg-black/85 border-2 border-[#D4AF37]/60 shadow-[0_0_25px_rgba(212,175,55,0.4)] backdrop-blur-xl gap-1">
-        <button
-          onClick={() => setViewMode('desktop')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-            viewMode === 'desktop'
-              ? 'bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black shadow-md'
-              : 'text-gray-300 hover:text-white'
-          }`}
-        >
-          <Monitor className="w-3.5 h-3.5" />
-          <span>Desktop Store</span>
-        </button>
-
-        <button
-          onClick={() => setViewMode('mobile_simulator')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-            viewMode === 'mobile_simulator'
-              ? 'bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black shadow-md'
-              : 'text-gray-300 hover:text-white'
-          }`}
-        >
-          <Smartphone className="w-3.5 h-3.5" />
-          <span>Mobile App (7 Screens)</span>
-        </button>
-
-        {/* Owner Analytics Dashboard */}
-        <button
-          onClick={() => setIsDashboardOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-[#E5C158] hover:bg-white/10 transition-all border border-amber-500/30 cursor-pointer"
-          title="Sign in to view store orders and consented analytics"
-        >
-          <BarChart3 className="w-3.5 h-3.5" />
-          <span>Owner Dashboard</span>
-        </button>
-      </div>
+      {/* Owner Analytics Dashboard */}
+      {isOwner && (
+        <div className="fixed bottom-20 lg:bottom-6 right-4 z-40">
+          <button
+            onClick={() => setIsDashboardOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/85 text-xs font-bold text-[#E5C158] hover:bg-white/10 transition-all border border-amber-500/30 cursor-pointer"
+            title="View store orders and consented analytics"
+          >
+            <BarChart3 className="w-3.5 h-3.5" />
+            <span>Owner Dashboard</span>
+          </button>
+        </div>
+      )}
 
       {/* Global Toast Notification */}
       {notification && (
@@ -139,66 +111,52 @@ const MainContent: React.FC = () => {
       <Navbar />
       <AnalyticsConsentNotice />
 
-      {/* Main Viewport switcher */}
-      {viewMode === 'desktop' ? (
-        <main className="flex-1">
-          {/* Hero Section with 3D Ganesha Viewport */}
-          <Suspense fallback={<DevotionalFallback label="Preparing 3D Divine Darshan..." />}>
-            <Hero />
-          </Suspense>
+      <main className="flex-1">
+        {/* Hero Section with 3D Ganesha Viewport */}
+        <Suspense fallback={<DevotionalFallback label="Preparing 3D Divine Darshan..." />}>
+          <Hero />
+        </Suspense>
 
-          {/* Explore By Category */}
-          <Suspense fallback={<DevotionalFallback label="Loading Sacred Categories..." />}>
-            <CategoryExplorer />
-          </Suspense>
+        {/* Explore By Category */}
+        <Suspense fallback={<DevotionalFallback label="Loading Sacred Categories..." />}>
+          <CategoryExplorer />
+        </Suspense>
 
-          {/* Best Sellers Grid & Product Cards */}
-          <Suspense fallback={<DevotionalFallback label="Loading Best Sellers..." />}>
-            <BestSellers />
-          </Suspense>
+        {/* Best Sellers Grid & Product Cards */}
+        <Suspense fallback={<DevotionalFallback label="Loading Best Sellers..." />}>
+          <BestSellers />
+        </Suspense>
 
-          {/* 4-Column Trust Badges Bar */}
-          <Suspense fallback={<DevotionalFallback label="Loading Trust Standards..." />}>
-            <TrustBadges />
-          </Suspense>
+        {/* 4-Column Trust Badges Bar */}
+        <Suspense fallback={<DevotionalFallback label="Loading Trust Standards..." />}>
+          <TrustBadges />
+        </Suspense>
 
-          {/* Create Your Own Custom Mala Banner */}
-          <Suspense fallback={<DevotionalFallback label="Loading Custom Mala Studio..." />}>
-            <CustomMalaBanner />
-          </Suspense>
+        {/* Create Your Own Custom Mala Banner */}
+        <Suspense fallback={<DevotionalFallback label="Loading Custom Mala Studio..." />}>
+          <CustomMalaBanner />
+        </Suspense>
 
-          {/* 4 Bottom Cards: Mala Videos, Customer Reviews, Why Choose AK Mala, Ganpati Special */}
-          <Suspense fallback={<DevotionalFallback label="Loading Community Darshans & Videos..." />}>
-            <BottomGridSection />
-          </Suspense>
+        {/* 4 Bottom Cards: Mala Videos, Customer Reviews, Why Choose AK Mala, Ganpati Special */}
+        <Suspense fallback={<DevotionalFallback label="Loading Community Darshans & Videos..." />}>
+          <BottomGridSection />
+        </Suspense>
 
-          {/* Interactive Custom Mala Studio */}
-          <Suspense fallback={<DevotionalFallback label="Loading Custom Studio Wizard..." />}>
-            <CustomMalaBuilder />
-          </Suspense>
+        {/* Interactive Custom Mala Studio */}
+        <Suspense fallback={<DevotionalFallback label="Loading Custom Studio Wizard..." />}>
+          <CustomMalaBuilder />
+        </Suspense>
 
-          {/* 1,000+ Media Gallery Section */}
-          <Suspense fallback={<DevotionalFallback label="Loading 1,000+ Devotional Gallery..." />}>
-            <GallerySection />
-          </Suspense>
+        {/* 1,000+ Media Gallery Section */}
+        <Suspense fallback={<DevotionalFallback label="Loading 1,000+ Devotional Gallery..." />}>
+          <GallerySection />
+        </Suspense>
 
-          {/* Easy Shopping Experience 6 Steps & Sub-Trust Bar */}
-          <Suspense fallback={<DevotionalFallback label="Loading Shopping Guide..." />}>
-            <EasyShoppingExperience />
-          </Suspense>
-        </main>
-      ) : (
-        <main className="flex-1 py-4">
-          <div className="text-center mb-2">
-            <span className="text-xs font-bold text-amber-300 uppercase tracking-widest">
-              Live Mobile Screens Interactive Preview (7 Screens)
-            </span>
-          </div>
-          <Suspense fallback={<DevotionalFallback label="Loading Mobile Simulator..." />}>
-            <MobileAppView />
-          </Suspense>
-        </main>
-      )}
+        {/* Easy Shopping Experience 6 Steps & Sub-Trust Bar */}
+        <Suspense fallback={<DevotionalFallback label="Loading Shopping Guide..." />}>
+          <EasyShoppingExperience />
+        </Suspense>
+      </main>
 
       {/* Global Luxury Footer */}
       <Footer />

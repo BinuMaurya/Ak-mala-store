@@ -37,6 +37,7 @@ import {
 export const AdminPanelModal: React.FC = () => {
   const {
     isAdminOpen,
+    isOwner,
     setIsAdminOpen,
     siteAssets,
     updateSiteAssets,
@@ -200,7 +201,7 @@ export const AdminPanelModal: React.FC = () => {
     category: 'Aarti'
   });
 
-  if (!isAdminOpen) return null;
+  if (!isAdminOpen || !isOwner) return null;
 
   // Preset Murti Presets
   const murtiPresets = [

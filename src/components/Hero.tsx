@@ -6,7 +6,6 @@ import {
   ShoppingBag,
   ShieldCheck,
   Truck,
-  RotateCcw,
   Flower2,
   HeartHandshake,
   ArrowRight
@@ -115,41 +114,6 @@ export const Hero: React.FC = () => {
 
           {/* RIGHT COLUMN: Floating Trust Cards & Quick Preview (3 cols) */}
           <div className="lg:col-span-3 flex flex-col space-y-3">
-            {/* Quick Card 1: Free Delivery */}
-            <div className="p-3.5 rounded-2xl gold-card gold-card-hover flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-[#E5C158] shrink-0">
-                <Truck className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="text-xs font-bold text-gray-100">Pan-India Express</h4>
-                <p className="text-[11px] text-amber-200/70">
-                  Free Cold-Chain above ₹{siteAssets.freeDeliveryThreshold}
-                </p>
-              </div>
-            </div>
-
-            {/* Quick Card 2: Safe & Pure */}
-            <div className="p-3.5 rounded-2xl gold-card gold-card-hover flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-                <ShieldCheck className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="text-xs font-bold text-gray-100">100% Pure Flowers</h4>
-                <p className="text-[11px] text-gray-400">Chemical-free morning harvests</p>
-              </div>
-            </div>
-
-            {/* Quick Card 3: Easy Returns */}
-            <div className="p-3.5 rounded-2xl gold-card gold-card-hover flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
-                <RotateCcw className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="text-xs font-bold text-gray-100">Easy Replacements</h4>
-                <p className="text-[11px] text-gray-400">Freshness guaranteed upon arrival</p>
-              </div>
-            </div>
-
             {/* Mini Interactive Promo Card: Ganpati Festival Special */}
             <div className="p-4 rounded-2xl bg-gradient-to-br from-[#2a1705] via-[#1a0f02] to-[#0d0701] border-2 border-[#D4AF37]/50 shadow-xl relative overflow-hidden group">
               <div className="absolute -top-6 -right-6 w-20 h-20 bg-amber-500/20 rounded-full blur-xl pointer-events-none" />

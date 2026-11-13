@@ -24,7 +24,10 @@ export const AuthOtpModal: React.FC = () => {
     setError('');
     const { error: authError } = await supabase.auth.signInWithOtp({
       email: email.trim(),
-      options: { shouldCreateUser: true }
+      options: {
+        shouldCreateUser: true,
+        data: name.trim() ? { full_name: name.trim() } : undefined
+      }
     });
     setIsLoading(false);
     if (authError) {
@@ -32,7 +35,7 @@ export const AuthOtpModal: React.FC = () => {
       return;
     }
     setWaitingForOtp(true);
-    showNotification('A one-time verification code was sent to your email.');
+    showNotification('Check your email for a sign-in link or one-time code.');
   };
 
   const verifyCode = async (event: React.FormEvent) => {
@@ -45,13 +48,25 @@ export const AuthOtpModal: React.FC = () => {
       token: otp.trim(),
       type: 'email'
     });
-    setIsLoading(false);
     if (authError) {
+      setIsLoading(false);
       setError(authError.message);
       return;
     }
+    let verifiedName = name.trim();
+    if (verifiedName) {
+      const { data: updatedUser, error: profileError } = await supabase.auth.updateUser({
+        data: { full_name: verifiedName }
+      });
+      if (profileError) {
+        showNotification('Signed in, but your profile name could not be saved.');
+      } else {
+        verifiedName = updatedUser.user.user_metadata.full_name || verifiedName;
+      }
+    }
+    setIsLoading(false);
     setUser({
-      name: name.trim() || data.user?.email || 'AK MALA Customer',
+      name: verifiedName || data.user?.email || 'AK MALA Customer',
       phone: '',
       email: data.user?.email || email.trim()
     });
@@ -95,7 +110,7 @@ export const AuthOtpModal: React.FC = () => {
               <LockKeyhole className="mx-auto mb-3 h-9 w-9 text-amber-300" />
               <span className="text-xs font-bold uppercase tracking-widest text-[#E5C158]">Secure customer access</span>
               <h3 className="mt-1 font-cinzel text-xl font-bold text-white">Sign in / Register</h3>
-              <p className="mt-2 text-xs text-gray-400">We will email a real one-time verification code.</p>
+              <p className="mt-2 text-xs text-gray-400">We will email a sign-in link or one-time code.</p>
             </div>
 
             {!waitingForOtp ? (
@@ -117,12 +132,14 @@ export const AuthOtpModal: React.FC = () => {
                   className="w-full rounded-xl border border-white/20 bg-black/50 p-3 text-xs text-white"
                 />
                 <button disabled={isLoading} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#D4AF37] to-[#E5C158] py-3 text-xs font-extrabold uppercase text-black disabled:opacity-50">
-                  {isLoading ? 'Sending code…' : 'Email me a code'} <ArrowRight className="h-4 w-4" />
+                  {isLoading ? 'Sending…' : 'Email me a sign-in link / code'} <ArrowRight className="h-4 w-4" />
                 </button>
               </form>
             ) : (
               <form onSubmit={verifyCode} className="space-y-3">
-                <p className="text-center text-xs text-gray-400">Enter the code sent to {email}</p>
+                <p className="text-center text-xs text-gray-400">
+                  If you received a code, enter it below. If you received a sign-in link, open it from this browser to finish signing in.
+                </p>
                 <input
                   inputMode="numeric"
                   required

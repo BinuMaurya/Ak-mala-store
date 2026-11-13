@@ -7,6 +7,8 @@ security enabled with no public policies; only the server accesses them.
 ## Configure the project
 
 1. Create a Supabase project and run `schema.sql` in its SQL Editor.
+   For an existing project, run `migrations/20261111_delivery_otp.sql` to add
+   the delivery OTP fields before using delivery confirmation.
 2. In Authentication, enable email OTP/magic-link sign-in. Add the deployed
    website URL to the allowed redirect URLs. Add the owner's verified email
    under Authentication > Users; owner sign-in does not allow public account creation.
@@ -26,6 +28,13 @@ security enabled with no public policies; only the server accesses them.
    variable or browser code. Legacy `SUPABASE_SERVICE_ROLE_KEY` is also supported.
 5. Configure Razorpay separately using the server-side variables in
    `.env.example`.
+6. Configure Twilio `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and
+   `TWILIO_FROM_NUMBER` in the local `.env` and production server secrets.
+   The store sends a 6-digit OTP when an owner marks an order out for delivery.
+   The OTP is stored as a keyed hash, expires after 10 minutes, and allows at
+   most five verification attempts. The owner enters the code provided by the
+   customer/courier to confirm delivery. Never expose Twilio credentials in
+   browser code or share them in chat.
 
 ## Run checkout locally
 
@@ -49,6 +58,9 @@ error until both Supabase and Razorpay are configured.
 `ADMIN_EMAILS` is a comma-separated allowlist of verified owner email
 addresses. Only those accounts can read orders or analytics. The dashboard
 authenticates with Supabase email OTP and the server checks each request.
+Sign in through the store's Login button with an allowlisted owner email to
+reveal the owner dashboard and media-management controls; customer accounts do
+not see those controls.
 
 Analytics collection is off until a visitor accepts the consent notice. It
 records page/product views and wishlist actions against a random browser ID,

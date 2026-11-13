@@ -459,7 +459,9 @@ export const CheckoutModal: React.FC = () => {
               onClick={handlePay}
               className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black font-black text-xs uppercase tracking-wider shadow-lg hover:opacity-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
-              <span>PROCEED TO PAY ₹{finalTotal}</span>
+              <span>
+                {paymentMethod === 'cod' ? 'PLACE ORDER (COD)' : `PROCEED TO PAY ₹${finalTotal}`}
+              </span>
               <ArrowRight className="w-4 h-4" />
             </button>
           )}

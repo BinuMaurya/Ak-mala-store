@@ -28,6 +28,7 @@ export const Navbar: React.FC = () => {
     setIsDashboardOpen,
     setIsAuthOpen,
     setIsAdminOpen,
+    isOwner,
     setIsGalleryOpen,
     siteAssets,
     user,
@@ -354,24 +355,26 @@ export const Navbar: React.FC = () => {
               <span>1,000+ Gallery</span>
             </button>
 
-            {/* Live Analytics Dashboard */}
-            <button
-              onClick={() => setIsDashboardOpen(true)}
-              className="hover:text-[#E5C158] transition-colors cursor-pointer flex items-center gap-1 text-emerald-400"
-            >
-              <BarChart3 className="w-3.5 h-3.5" />
-              <span>{t('navDashboard')}</span>
-            </button>
+            {isOwner && (
+              <>
+                <button
+                  onClick={() => setIsDashboardOpen(true)}
+                  className="hover:text-[#E5C158] transition-colors cursor-pointer flex items-center gap-1 text-emerald-400"
+                >
+                  <BarChart3 className="w-3.5 h-3.5" />
+                  <span>{t('navDashboard')}</span>
+                </button>
 
-            {/* Admin CMS Studio Button */}
-            <button
-              onClick={() => setIsAdminOpen(true)}
-              className="px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-400/50 hover:bg-amber-500/25 text-[#E5C158] font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-              title="Open Site CMS to change murti, photos, videos, and offers"
-            >
-              <Settings className="w-3.5 h-3.5" />
-              <span>Admin Studio</span>
-            </button>
+                <button
+                  onClick={() => setIsAdminOpen(true)}
+                  className="px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-400/50 hover:bg-amber-500/25 text-[#E5C158] font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  title="Open Site CMS to change murti, photos, videos, and offers"
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                  <span>Admin Studio</span>
+                </button>
+              </>
+            )}
           </div>
 
           {/* Right festive banner button */}
@@ -431,15 +434,17 @@ export const Navbar: React.FC = () => {
             >
               ✨ {t('navCustomMala')}
             </button>
-            <button
-              onClick={() => {
-                setIsDashboardOpen(true);
-                setMobileMenuOpen(false);
-              }}
-              className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-left text-emerald-400"
-            >
-              📊 {t('navDashboard')}
-            </button>
+            {isOwner && (
+              <button
+                onClick={() => {
+                  setIsDashboardOpen(true);
+                  setMobileMenuOpen(false);
+                }}
+                className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-left text-emerald-400"
+              >
+                📊 {t('navDashboard')}
+              </button>
+            )}
           </div>
         </div>
       )}
