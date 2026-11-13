@@ -3,7 +3,6 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import express, { type Request, type Response } from 'express';
 import { GoogleGenAI } from '@google/genai';
-import { createServer as createViteServer } from 'vite';
 import { products } from './src/data/products';
 
 const app = express();
@@ -1169,42 +1168,47 @@ app.post('/api/payments/verify', async (request: Request, response: Response) =>
   }
 });
 
-if (isProduction) {
-  const distPath = path.resolve('dist');
-  app.use(express.static(distPath));
-  app.get('*', (_request: Request, response: Response) => {
-    response.sendFile(path.join(distPath, 'index.html'));
+if (process.env.VERCEL !== '1') {
+  if (isProduction) {
+    const distPath = path.resolve('dist');
+    app.use(express.static(distPath));
+    app.get('*', (_request: Request, response: Response) => {
+      response.sendFile(path.join(distPath, 'index.html'));
+    });
+  } else {
+    const { createServer: createViteServer } = await import('vite');
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa'
+    });
+    app.use(vite.middlewares);
+  }
+
+  const server = app.listen(port, '0.0.0.0');
+  let activePort = port;
+  const maxPortAttempts = 20;
+
+  server.on('listening', () => {
+    console.log(`AK MALA server listening on http://localhost:${activePort}`);
   });
-} else {
-  const vite = await createViteServer({
-    server: { middlewareMode: true },
-    appType: 'spa'
+
+  server.on('error', (error: NodeJS.ErrnoException) => {
+    if (error.code !== 'EADDRINUSE' || isProduction || process.env.PORT) {
+      console.error('Could not start the AK MALA server:', error);
+      process.exitCode = 1;
+      return;
+    }
+
+    if (activePort >= port + maxPortAttempts) {
+      console.error(`Ports ${port}-${activePort} are already in use. Set PORT to an available port and retry.`);
+      process.exitCode = 1;
+      return;
+    }
+
+    activePort += 1;
+    console.warn(`Port ${activePort - 1} is already in use; trying port ${activePort}.`);
+    server.listen(activePort, '0.0.0.0');
   });
-  app.use(vite.middlewares);
 }
 
-const server = app.listen(port, '0.0.0.0');
-let activePort = port;
-const maxPortAttempts = 20;
-
-server.on('listening', () => {
-  console.log(`AK MALA server listening on http://localhost:${activePort}`);
-});
-
-server.on('error', (error: NodeJS.ErrnoException) => {
-  if (error.code !== 'EADDRINUSE' || isProduction || process.env.PORT) {
-    console.error('Could not start the AK MALA server:', error);
-    process.exitCode = 1;
-    return;
-  }
-
-  if (activePort >= port + maxPortAttempts) {
-    console.error(`Ports ${port}-${activePort} are already in use. Set PORT to an available port and retry.`);
-    process.exitCode = 1;
-    return;
-  }
-
-  activePort += 1;
-  console.warn(`Port ${activePort - 1} is already in use; trying port ${activePort}.`);
-  server.listen(activePort, '0.0.0.0');
-});
+export default app;
