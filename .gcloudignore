@@ -1,0 +1,14 @@
+.env
+.env.*
+.venv/
+node_modules/
+dist/
+.git/
+*.log
+/debug_mask_analysis.py
+/ganpati_garland_variants.py
+/ganpati_isolated_test.png
+/grabcut_mask.png
+/grabcut_rgba.png
+/remove_mala_only.py
+/bun.lock
