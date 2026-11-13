@@ -1209,6 +1209,12 @@ if (process.env.VERCEL !== '1') {
     console.warn(`Port ${activePort - 1} is already in use; trying port ${activePort}.`);
     server.listen(activePort, '0.0.0.0');
   });
+} else {
+  const publicPath = path.resolve('public');
+  app.use(express.static(publicPath));
+  app.get('*', (_request: Request, response: Response) => {
+    response.sendFile(path.join(publicPath, 'index.html'));
+  });
 }
 
 export default app;
