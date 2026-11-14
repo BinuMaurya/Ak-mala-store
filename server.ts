@@ -287,18 +287,33 @@ function parseProduct(input: unknown): Product {
   const product = input as Record<string, unknown>;
   const allowedCategories = ['rose', 'mogra', 'marigold', 'orchid', 'tulsi', 'temple', 'wedding', 'festive'];
   const allowedSizes = ['16"', '22"', '28"', '36"'];
+  const safeMediaUrl = (value: unknown) =>
+    typeof value === 'string' && value.length <= 2048 &&
+    (value.startsWith('https://') || (value.startsWith('/') && !value.startsWith('//')));
+  const stringArray = (value: unknown, max: number) =>
+    Array.isArray(value) && value.length <= max &&
+    value.every((entry) => typeof entry === 'string' && entry.length <= 160);
   if (
     typeof product.id !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(product.id) ||
     typeof product.name !== 'string' || !product.name.trim() || product.name.length > 160 ||
+    typeof product.hindiName !== 'string' || product.hindiName.length > 160 ||
+    typeof product.marathiName !== 'string' || product.marathiName.length > 160 ||
+    typeof product.description !== 'string' || product.description.length > 3000 ||
+    typeof product.hindiDescription !== 'string' || product.hindiDescription.length > 3000 ||
+    typeof product.bestForDeity !== 'string' || product.bestForDeity.length > 300 ||
     typeof product.price !== 'number' || !Number.isSafeInteger(product.price) || product.price < 1 || product.price > 10000000 ||
     typeof product.originalPrice !== 'number' || !Number.isSafeInteger(product.originalPrice) || product.originalPrice < 1 || product.originalPrice > 10000000 ||
-    typeof product.image !== 'string' || product.image.length > 2048 ||
+    typeof product.discountPercent !== 'number' || !Number.isFinite(product.discountPercent) || product.discountPercent < 0 || product.discountPercent > 100 ||
+    typeof product.rating !== 'number' || !Number.isFinite(product.rating) || product.rating < 0 || product.rating > 5 ||
+    typeof product.reviewsCount !== 'number' || !Number.isSafeInteger(product.reviewsCount) || product.reviewsCount < 0 ||
+    typeof product.freshnessHours !== 'number' || !Number.isSafeInteger(product.freshnessHours) || product.freshnessHours < 1 || product.freshnessHours > 10000 ||
+    typeof product.fragranceLevel !== 'string' || !['Subtle', 'High', 'Divine Sacred'].includes(product.fragranceLevel) ||
+    !safeMediaUrl(product.image) ||
     typeof product.inStock !== 'boolean' ||
     typeof product.category !== 'string' || !allowedCategories.includes(product.category) ||
     !Array.isArray(product.availableSizes) || product.availableSizes.length < 1 || product.availableSizes.length > 4 ||
-    !Array.isArray(product.galleryImages) || product.galleryImages.length > 12 ||
-    !Array.isArray(product.tags) || product.tags.length > 30 ||
-    !Array.isArray(product.flowers) || product.flowers.length > 30
+    !Array.isArray(product.galleryImages) || product.galleryImages.length > 12 || !product.galleryImages.every(safeMediaUrl) ||
+    !stringArray(product.tags, 30) || !stringArray(product.flowers, 30)
   ) {
     throw new Error('Product details are incomplete or invalid.');
   }
@@ -682,7 +697,6 @@ app.get('/api/products', async (_request: Request, response: Response) => {
     response.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=120');
     response.json({ products: await loadCatalogProducts() });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unable to load products.';
     response.status(503).json({ error: 'The product catalogue is temporarily unavailable.' });
   }
 });
@@ -700,8 +714,8 @@ app.post('/api/admin/products', async (request: Request, response: Response) => 
     response.status(200).json({ product: saved.data });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to save product.';
-    const status = message.startsWith('Supabase is not configured') ? 503 : error instanceof GatewayError ? 502 : 403;
-    response.status(status).json({ error: status === 403 ? message : 'Unable to save this product right now.' });
+    const status = message.startsWith('Supabase is not configured') ? 503 : error instanceof GatewayError ? 502 : /sign in|authorized|owner access|not authorized/i.test(message) ? 403 : 400;
+    response.status(status).json({ error: status === 400 || status === 403 ? message : 'Unable to save this product right now.' });
   }
 });
 
