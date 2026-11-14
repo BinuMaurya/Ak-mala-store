@@ -121,18 +121,65 @@ export const AdminPanelModal: React.FC = () => {
     };
   }, [activeTab, pluginRefresh]);
 
-  // Universal local file upload reader helper
+  // Upload files through the server; the browser never writes directly to Storage.
   const handleLocalFileUpload = (
     e: React.ChangeEvent<HTMLInputElement>,
-    onComplete: (dataUrl: string) => void
+    onComplete: (publicUrl: string) => void
   ) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'video/mp4', 'video/webm'];
+    const maxBytes = file.type.startsWith('image/') ? 4 * 1024 * 1024 : 10 * 1024 * 1024;
+    if (!allowedTypes.includes(file.type)) {
+      showNotification('Supported formats: JPG, PNG, WebP, AVIF, MP4 and WebM.');
+      return;
+    }
+    if (file.size < 1 || file.size > maxBytes) {
+      showNotification('Images must be 4 MB or smaller; videos must be 10 MB or smaller.');
+      return;
+    }
+    if (!supabase) {
+      showNotification('Owner database connection is not configured.');
+      return;
+    }
     const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      onComplete(dataUrl);
+    reader.onload = async (event) => {
+      const dataUrl = event.target?.result;
+      if (typeof dataUrl !== 'string' || !dataUrl.includes(',')) {
+        showNotification('The selected file could not be read.');
+        return;
+      }
+      try {
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        if (!token) {
+          showNotification('Please sign in with the owner account again.');
+          return;
+        }
+        const response = await fetch('/api/admin/media/upload', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            fileName: file.name,
+            contentType: file.type,
+            data: dataUrl.slice(dataUrl.indexOf(',') + 1)
+          })
+        });
+        const result = await response.json().catch(() => ({})) as { url?: string; error?: string };
+        if (!response.ok || !result.url) {
+          showNotification(result.error || 'Media upload failed. Please try again.');
+          return;
+        }
+        onComplete(result.url);
+      } catch {
+        showNotification('Could not connect to secure media storage.');
+      }
     };
+    reader.onerror = () => showNotification('The selected file could not be read.');
     reader.readAsDataURL(file);
   };
 
