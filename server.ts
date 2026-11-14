@@ -634,7 +634,7 @@ app.post('/api/admin/products', async (request: Request, response: Response) => 
     response.status(200).json({ product: saved.data });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to save product.';
-    const status = message.includes('database') ? 502 : message.startsWith('Supabase is not configured') ? 503 : 403;
+    const status = message.startsWith('Supabase is not configured') ? 503 : error instanceof GatewayError ? 502 : 403;
     response.status(status).json({ error: status === 403 ? message : 'Unable to save this product right now.' });
   }
 });
@@ -664,7 +664,7 @@ app.delete('/api/admin/products/:id', async (request: Request, response: Respons
     response.json({ deleted: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to remove product.';
-    const status = message.includes('database') ? 502 : message.startsWith('Supabase is not configured') ? 503 : 403;
+    const status = message.startsWith('Supabase is not configured') ? 503 : error instanceof GatewayError ? 502 : 403;
     response.status(status).json({ error: status === 403 ? message : 'Unable to remove this product right now.' });
   }
 });
