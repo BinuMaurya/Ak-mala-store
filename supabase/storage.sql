@@ -18,5 +18,9 @@ create policy "Public can view AK MALA media"
   to anon, authenticated
   using (bucket_id = 'ak-mala-media');
 
--- No anon/authenticated INSERT, UPDATE, or DELETE policies are created.
+-- Explicitly remove direct browser write privileges even if older permissive
+-- policies exist in this Supabase project. The service role bypasses RLS.
+revoke insert, update, delete on storage.objects from anon, authenticated;
+grant select on storage.objects to anon, authenticated;
+
 -- Owner uploads are proxied by server.ts using the server-only service role.
