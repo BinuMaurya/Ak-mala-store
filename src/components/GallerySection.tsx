@@ -14,24 +14,16 @@ import {
   Play,
   X,
   Share2,
-  PlusCircle,
-  Layers,
   MapPin,
   Calendar,
   Download,
-  Flame,
-  Trash2,
-  RefreshCw
+  Flame
 } from 'lucide-react';
 
 export const GallerySection: React.FC = () => {
   const {
     galleryItems,
-    deleteGalleryItem,
-    bulkSeed1000Items,
-    setIsAdminOpen,
     showNotification,
-    updateSiteAssets,
     setIsCustomBuilderOpen
   } = useApp();
 
@@ -104,26 +96,7 @@ export const GallerySection: React.FC = () => {
             </p>
           </div>
 
-          {/* Quick Actions (Admin Add & 1000+ Generator) */}
-          <div className="flex flex-wrap items-center gap-2">
-            {galleryItems.length < 500 && (
-              <button
-                onClick={bulkSeed1000Items}
-                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-700/20 border border-amber-400/40 text-amber-300 text-xs font-bold hover:bg-amber-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                <Layers className="w-3.5 h-3.5" />
-                <span>Load 1,000+ Sacred Media</span>
-              </button>
-            )}
-
-            <button
-              onClick={() => setIsAdminOpen(true)}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black text-xs font-black uppercase tracking-wider shadow-md hover:scale-105 transition-all flex items-center gap-1.5 cursor-pointer"
-            >
-              <PlusCircle className="w-3.5 h-3.5" />
-              <span>Admin: Add Photo/Video</span>
-            </button>
-          </div>
+          {/* Owner upload and gallery management are available only after owner sign-in. */}
         </div>
 
         {/* Filter Controls Bar */}
@@ -365,21 +338,6 @@ export const GallerySection: React.FC = () => {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                {activeLightboxItem.type === 'image' && (
-                  <button
-                    onClick={() => {
-                      updateSiteAssets({ heroGaneshaImage: activeLightboxItem.url });
-                      showNotification(`🕉️ Lord Ganesha Murti updated with "${activeLightboxItem.title}"!`);
-                      setActiveLightboxItem(null);
-                    }}
-                    className="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/40 text-amber-300 font-bold flex items-center gap-1.5 cursor-pointer"
-                    title="Set this image as primary Ganpati Murti on website"
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                    <span>🕉️ Make Ganpati Murti</span>
-                  </button>
-                )}
-
                 <button
                   onClick={() => {
                     setIsCustomBuilderOpen(true);
@@ -400,33 +358,6 @@ export const GallerySection: React.FC = () => {
                 >
                   <Share2 className="w-3.5 h-3.5" />
                   <span>Share</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setIsAdminOpen(true);
-                    setActiveLightboxItem(null);
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-amber-300 flex items-center gap-1.5 cursor-pointer"
-                  title="Replace or edit in Admin Media Studio"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Admin Studio</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    if (window.confirm(`Permanently delete "${activeLightboxItem.title}" from Gallery?`)) {
-                      deleteGalleryItem(activeLightboxItem.id);
-                      setActiveLightboxItem(null);
-                      showNotification('Media deleted from gallery successfully.');
-                    }
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-red-600/15 hover:bg-red-600/25 border border-red-500/40 text-red-300 flex items-center gap-1.5 cursor-pointer"
-                  title="Delete this media item"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Delete</span>
                 </button>
 
                 <button

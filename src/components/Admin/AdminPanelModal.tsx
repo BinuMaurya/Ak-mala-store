@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { supabase } from '../../services/supabase';
 import { Product, MediaItem, VideoItem } from '../../types';
 import { MediaGalleryPickerModal } from './MediaGalleryPickerModal';
 import { MediaStudioSection } from './MediaStudioSection';
@@ -59,6 +60,41 @@ export const AdminPanelModal: React.FC = () => {
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'media_studio' | 'murti' | 'products' | 'offers' | 'videos' | 'gallery' | 'plugins'>('media_studio');
+  const [ownerAuthorized, setOwnerAuthorized] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!isAdminOpen) {
+      setOwnerAuthorized(false);
+      setAuthChecked(false);
+      return;
+    }
+    const verifyOwnerAccess = async () => {
+      if (!supabase) {
+        if (!cancelled) setAuthChecked(true);
+        return;
+      }
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) {
+        if (!cancelled) setAuthChecked(true);
+        return;
+      }
+      try {
+        const response = await fetch('/api/admin/data', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!cancelled) setOwnerAuthorized(response.ok);
+      } catch {
+        if (!cancelled) setOwnerAuthorized(false);
+      } finally {
+        if (!cancelled) setAuthChecked(true);
+      }
+    };
+    void verifyOwnerAccess();
+    return () => { cancelled = true; };
+  }, [isAdminOpen]);
   const [pluginStatus, setPluginStatus] = useState<{ gemini: boolean; supabase: boolean; razorpay: boolean } | null>(null);
   const [pluginStatusError, setPluginStatusError] = useState(false);
   const [pluginRefresh, setPluginRefresh] = useState(0);
@@ -85,18 +121,66 @@ export const AdminPanelModal: React.FC = () => {
     };
   }, [activeTab, pluginRefresh]);
 
-  // Universal local file upload reader helper
+  // Upload files through the server; the browser never writes directly to Storage.
   const handleLocalFileUpload = (
     e: React.ChangeEvent<HTMLInputElement>,
-    onComplete: (dataUrl: string) => void
+    onComplete: (publicUrl: string) => void
   ) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'video/mp4', 'video/webm'];
+    const maxBytes = file.type.startsWith('image/') ? 4 * 1024 * 1024 : 10 * 1024 * 1024;
+    if (!allowedTypes.includes(file.type)) {
+      showNotification('Supported formats: JPG, PNG, WebP, AVIF, MP4 and WebM.');
+      return;
+    }
+    if (file.size < 1 || file.size > maxBytes) {
+      showNotification('Images must be 4 MB or smaller; videos must be 10 MB or smaller.');
+      return;
+    }
+    const supabaseClient = supabase;
+    if (!supabaseClient) {
+      showNotification('Owner database connection is not configured.');
+      return;
+    }
     const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      onComplete(dataUrl);
+    reader.onload = async (event) => {
+      const dataUrl = event.target?.result;
+      if (typeof dataUrl !== 'string' || !dataUrl.includes(',')) {
+        showNotification('The selected file could not be read.');
+        return;
+      }
+      try {
+        const { data } = await supabaseClient.auth.getSession();
+        const token = data.session?.access_token;
+        if (!token) {
+          showNotification('Please sign in with the owner account again.');
+          return;
+        }
+        const response = await fetch('/api/admin/media/upload', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            fileName: file.name,
+            contentType: file.type,
+            data: dataUrl.slice(dataUrl.indexOf(',') + 1)
+          })
+        });
+        const result = await response.json().catch(() => ({})) as { url?: string; error?: string };
+        if (!response.ok || !result.url) {
+          showNotification(result.error || 'Media upload failed. Please try again.');
+          return;
+        }
+        onComplete(result.url);
+      } catch {
+        showNotification('Could not connect to secure media storage.');
+      }
     };
+    reader.onerror = () => showNotification('The selected file could not be read.');
     reader.readAsDataURL(file);
   };
 
@@ -152,6 +236,7 @@ export const AdminPanelModal: React.FC = () => {
   const [newProd, setNewProd] = useState<Partial<Product>>({
     name: 'Ashtavinayak Swarna Mala',
     hindiName: 'अष्टविनायक स्वर्ण माला',
+    marathiName: 'अष्टविनायक सुवर्ण हार',
     category: 'festive',
     price: 699,
     originalPrice: 999,
@@ -200,7 +285,7 @@ export const AdminPanelModal: React.FC = () => {
     category: 'Aarti'
   });
 
-  if (!isAdminOpen) return null;
+  if (!isAdminOpen || !authChecked || !ownerAuthorized) return null;
 
   // Preset Murti Presets
   const murtiPresets = [

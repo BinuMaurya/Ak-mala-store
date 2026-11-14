@@ -285,6 +285,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem('ak_mala_products', JSON.stringify(allProducts));
   }, [allProducts]);
 
+  // The server catalogue is authoritative; localStorage is only a temporary cache.
+  useEffect(() => {
+    let active = true;
+    void fetch('/api/products')
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Catalogue unavailable');
+        return response.json() as Promise<{ products?: Product[] }>;
+      })
+      .then((data) => {
+        if (active && Array.isArray(data.products)) setAllProducts(data.products);
+      })
+      .catch(() => {
+        // Keep the bundled/local cache visible if the database migration has not run yet.
+      });
+    return () => { active = false; };
+  }, []);
+
   useEffect(() => {
     localStorage.setItem('ak_mala_site_assets', JSON.stringify(siteAssets));
   }, [siteAssets]);
@@ -378,21 +395,90 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showNotification('Site assets & branding updated successfully!');
   };
 
+  const saveProductToServer = async (product: Product) => {
+    if (!supabase) {
+      showNotification('Owner database connection is not configured.');
+      return false;
+    }
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) {
+      showNotification('Please sign in with the owner account again.');
+      return false;
+    }
+    try {
+      const response = await fetch('/api/admin/products', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ product })
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        showNotification(result.error || 'Product could not be saved.');
+        return false;
+      }
+      return true;
+    } catch {
+      showNotification('Could not connect to the product database.');
+      return false;
+    }
+  };
+
   const addProduct = (newProd: Product) => {
-    setAllProducts((prev) => [newProd, ...prev]);
-    showNotification(`Added new product: ${newProd.name}`);
+    void (async () => {
+      if (await saveProductToServer(newProd)) {
+        setAllProducts((prev) => [newProd, ...prev.filter((product) => product.id !== newProd.id)]);
+        showNotification(`Added new product: ${newProd.name}`);
+      }
+    })();
   };
 
   const updateProduct = (id: string, updated: Partial<Product>) => {
-    setAllProducts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, ...updated } : p))
-    );
-    showNotification(`Updated product: ${id}`);
+    void (async () => {
+      const existing = allProducts.find((product) => product.id === id);
+      if (!existing) {
+        showNotification('Product not found. Refresh the catalogue and try again.');
+        return;
+      }
+      const nextProduct = { ...existing, ...updated };
+      if (await saveProductToServer(nextProduct)) {
+        setAllProducts((prev) => prev.map((product) => product.id === id ? nextProduct : product));
+        showNotification(`Updated product: ${id}`);
+      }
+    })();
   };
 
   const deleteProduct = (id: string) => {
-    setAllProducts((prev) => prev.filter((p) => p.id !== id));
-    showNotification(`Product ${id} removed.`);
+    void (async () => {
+      if (!supabase) {
+        showNotification('Owner database connection is not configured.');
+        return;
+      }
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) {
+        showNotification('Please sign in with the owner account again.');
+        return;
+      }
+      try {
+        const response = await fetch(`/api/admin/products/${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!response.ok) {
+          const result = await response.json().catch(() => ({}));
+          showNotification(result.error || 'Product could not be removed.');
+          return;
+        }
+        setAllProducts((prev) => prev.filter((product) => product.id !== id));
+        showNotification(`Product ${id} removed.`);
+      } catch {
+        showNotification('Could not connect to the product database.');
+      }
+    })();
   };
 
   const addGalleryItem = (item: Omit<MediaItem, 'id' | 'likes' | 'date'>) => {
