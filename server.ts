@@ -318,13 +318,16 @@ function parseProduct(input: unknown): Product {
     throw new Error('Product details are incomplete or invalid.');
   }
   for (const size of product.availableSizes) {
+    if (!size || typeof size !== 'object') {
+      throw new Error('One or more product sizes are invalid.');
+    }
+    const sizeRecord = size as Record<string, unknown>;
     if (
-      !size || typeof size !== 'object' ||
-      !allowedSizes.includes((size as Record<string, unknown>).size as string) ||
-      typeof (size as Record<string, unknown>).name !== 'string' ||
-      typeof (size as Record<string, unknown>).extraPrice !== 'number' ||
-      !Number.isSafeInteger((size as Record<string, unknown>).extraPrice) ||
-      (size as Record<string, unknown>).extraPrice < 0
+      typeof sizeRecord.size !== 'string' || !allowedSizes.includes(sizeRecord.size) ||
+      typeof sizeRecord.name !== 'string' ||
+      typeof sizeRecord.extraPrice !== 'number' ||
+      !Number.isSafeInteger(sizeRecord.extraPrice) ||
+      sizeRecord.extraPrice < 0
     ) {
       throw new Error('One or more product sizes are invalid.');
     }
