@@ -235,6 +235,7 @@ export const AdminPanelModal: React.FC = () => {
   const [newProd, setNewProd] = useState<Partial<Product>>({
     name: 'Ashtavinayak Swarna Mala',
     hindiName: 'अष्टविनायक स्वर्ण माला',
+    marathiName: 'अष्टविनायक सुवर्ण हार',
     category: 'festive',
     price: 699,
     originalPrice: 999,
