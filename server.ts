@@ -5,6 +5,7 @@ import express, { type Request, type Response } from 'express';
 import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 import { products } from './src/data/products';
+import type { Product } from './src/types';
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
@@ -260,17 +261,75 @@ function parseVisitorId(input: unknown): string | null {
   return input;
 }
 
-function createStoredOrderFields(
+async function loadCatalogProducts(): Promise<Product[]> {
+  const rows = await supabaseRequest<Array<{ id: string; data: Product; is_active: boolean }>>(
+    'store_products?select=id,data,is_active',
+    'GET'
+  );
+  const overrides = new Map(rows.map((row) => [row.id, row]));
+  const merged = products.flatMap((baseProduct) => {
+    const row = overrides.get(baseProduct.id);
+    if (!row) return [baseProduct];
+    return row.is_active ? [row.data] : [];
+  });
+  for (const row of rows) {
+    if (row.is_active && !products.some((baseProduct) => baseProduct.id === row.id)) {
+      merged.push(row.data);
+    }
+  }
+  return merged;
+}
+
+function parseProduct(input: unknown): Product {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new Error('Invalid product details.');
+  }
+  const product = input as Record<string, unknown>;
+  const allowedCategories = ['rose', 'mogra', 'marigold', 'orchid', 'tulsi', 'temple', 'wedding', 'festive'];
+  const allowedSizes = ['16"', '22"', '28"', '36"'];
+  if (
+    typeof product.id !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(product.id) ||
+    typeof product.name !== 'string' || !product.name.trim() || product.name.length > 160 ||
+    typeof product.price !== 'number' || !Number.isSafeInteger(product.price) || product.price < 1 || product.price > 10000000 ||
+    typeof product.originalPrice !== 'number' || !Number.isSafeInteger(product.originalPrice) || product.originalPrice < 1 || product.originalPrice > 10000000 ||
+    typeof product.image !== 'string' || product.image.length > 2048 ||
+    typeof product.inStock !== 'boolean' ||
+    typeof product.category !== 'string' || !allowedCategories.includes(product.category) ||
+    !Array.isArray(product.availableSizes) || product.availableSizes.length < 1 || product.availableSizes.length > 4 ||
+    !Array.isArray(product.galleryImages) || product.galleryImages.length > 12 ||
+    !Array.isArray(product.tags) || product.tags.length > 30 ||
+    !Array.isArray(product.flowers) || product.flowers.length > 30
+  ) {
+    throw new Error('Product details are incomplete or invalid.');
+  }
+  for (const size of product.availableSizes) {
+    if (
+      !size || typeof size !== 'object' ||
+      !allowedSizes.includes((size as Record<string, unknown>).size as string) ||
+      typeof (size as Record<string, unknown>).name !== 'string' ||
+      typeof (size as Record<string, unknown>).extraPrice !== 'number' ||
+      !Number.isSafeInteger((size as Record<string, unknown>).extraPrice) ||
+      (size as Record<string, unknown>).extraPrice < 0
+    ) {
+      throw new Error('One or more product sizes are invalid.');
+    }
+  }
+  if (JSON.stringify(product).length > 64000) throw new Error('Product details are too large.');
+  return product as unknown as Product;
+}
+
+async function createStoredOrderFields(
   cartLines: CartLineInput[],
   customer: CheckoutCustomer,
   couponCode: unknown,
   visitorId: string | null
 ) {
-  const quote = createPaymentQuote(cartLines, couponCode);
+  const catalogue = await loadCatalogProducts();
+  const quote = createPaymentQuote(cartLines, couponCode, catalogue);
   const items = cartLines.map((line) => {
-    const product = products.find((candidate) => candidate.id === line.productId);
+    const product = catalogue.find((candidate) => candidate.id === line.productId);
     const size = product?.availableSizes.find((option) => option.size === line.selectedSize);
-    if (!product || !size) throw new Error('A cart item is unavailable. Refresh your cart and try again.');
+    if (!product || !product.inStock || !size) throw new Error('A cart item is unavailable. Refresh your cart and try again.');
     return {
       productId: product.id,
       productName: product.name,
@@ -383,13 +442,13 @@ function parseCartLines(input: unknown): CartLineInput[] {
   });
 }
 
-function createPaymentQuote(cartLines: CartLineInput[], couponCode: unknown): PaymentQuote {
+function createPaymentQuote(cartLines: CartLineInput[], couponCode: unknown, catalogue: Product[]): PaymentQuote {
   if (couponCode !== null && couponCode !== undefined && couponCode !== festivalCouponCode) {
     throw new Error('This coupon is not available for online checkout.');
   }
 
   const subtotal = cartLines.reduce((total, line) => {
-    const product = products.find((candidate) => candidate.id === line.productId);
+    const product = catalogue.find((candidate) => candidate.id === line.productId);
     if (!product || !product.inStock) {
       throw new Error('A cart item is unavailable for online payment. Refresh your cart and try again.');
     }
@@ -429,7 +488,7 @@ app.post('/api/payments/create-order', async (request: Request, response: Respon
     if (paymentMethod !== 'upi' && paymentMethod !== 'card' && paymentMethod !== 'netbanking' && paymentMethod !== 'wallet') {
       throw new Error('Choose a supported payment method.');
     }
-    const orderFields = createStoredOrderFields(cartLines, customer, body.couponCode, visitorId);
+    const orderFields = await createStoredOrderFields(cartLines, customer, body.couponCode, visitorId);
     const order = await razorpayRequest<RazorpayOrder>('/orders', 'POST', {
       amount: orderFields.total * 100,
       currency: 'INR',
@@ -549,6 +608,64 @@ app.post('/api/analytics/events', async (request: Request, response: Response) =
     const status = message.startsWith('Supabase is not configured') ? 503 : 400;
     if (status !== 400) console.error(message);
     response.status(status).json({ error: message });
+  }
+});
+
+app.get('/api/products', async (_request: Request, response: Response) => {
+  try {
+    response.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=120');
+    response.json({ products: await loadCatalogProducts() });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to load products.';
+    response.status(503).json({ error: 'The product catalogue is temporarily unavailable.' });
+  }
+});
+
+app.post('/api/admin/products', async (request: Request, response: Response) => {
+  try {
+    await requireAdmin(request);
+    const product = parseProduct(getRequestBody(request).product);
+    const [saved] = await supabaseRequest<Array<{ id: string; data: Product; is_active: boolean }>>(
+      'store_products?on_conflict=id',
+      'POST',
+      [{ id: product.id, data: product, is_active: true, updated_at: new Date().toISOString() }],
+      'resolution=merge-duplicates,return=representation'
+    );
+    response.status(200).json({ product: saved.data });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to save product.';
+    const status = message.includes('database') ? 502 : message.startsWith('Supabase is not configured') ? 503 : 403;
+    response.status(status).json({ error: status === 403 ? message : 'Unable to save this product right now.' });
+  }
+});
+
+app.delete('/api/admin/products/:id', async (request: Request, response: Response) => {
+  try {
+    await requireAdmin(request);
+    const productId = request.params.id;
+    if (!/^[a-zA-Z0-9_-]{1,100}$/.test(productId)) {
+      response.status(400).json({ error: 'Invalid product identifier.' });
+      return;
+    }
+    const [saved] = await supabaseRequest<Array<{ id: string }>>(
+      `store_products?id=eq.${encodeURIComponent(productId)}&select=id`,
+      'PATCH',
+      { is_active: false, updated_at: new Date().toISOString() },
+      'return=representation'
+    );
+    if (!saved) {
+      await supabaseRequest<unknown>(
+        'store_products?on_conflict=id',
+        'POST',
+        [{ id: productId, data: { id: productId }, is_active: false, updated_at: new Date().toISOString() }],
+        'resolution=merge-duplicates,return=minimal'
+      );
+    }
+    response.json({ deleted: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to remove product.';
+    const status = message.includes('database') ? 502 : message.startsWith('Supabase is not configured') ? 503 : 403;
+    response.status(status).json({ error: status === 403 ? message : 'Unable to remove this product right now.' });
   }
 });
 
