@@ -14,24 +14,16 @@ import {
   Play,
   X,
   Share2,
-  PlusCircle,
-  Layers,
   MapPin,
   Calendar,
   Download,
-  Flame,
-  Trash2,
-  RefreshCw
+  Flame
 } from 'lucide-react';
 
 export const GallerySection: React.FC = () => {
   const {
     galleryItems,
-    deleteGalleryItem,
-    bulkSeed1000Items,
-    setIsAdminOpen,
     showNotification,
-    updateSiteAssets,
     setIsCustomBuilderOpen
   } = useApp();
 
