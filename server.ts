@@ -87,7 +87,7 @@ interface StoredOrder {
   created_at: string;
 }
 
-app.use(express.json({ limit: '32kb' }));
+app.use(express.json({ limit: '14mb' }));
 
 app.get('/api/plugins/status', (_request: Request, response: Response) => {
   response.json({
@@ -608,6 +608,72 @@ app.post('/api/analytics/events', async (request: Request, response: Response) =
     const status = message.startsWith('Supabase is not configured') ? 503 : 400;
     if (status !== 400) console.error(message);
     response.status(status).json({ error: message });
+  }
+});
+
+app.post('/api/admin/media/upload', async (request: Request, response: Response) => {
+  try {
+    await requireAdmin(request);
+    const body = getRequestBody(request);
+    if (typeof body.contentType !== 'string' || typeof body.data !== 'string') {
+      response.status(400).json({ error: 'Choose a supported image or video file.' });
+      return;
+    }
+    const allowedTypes = new Set([
+      'image/jpeg', 'image/png', 'image/webp', 'image/avif', 'video/mp4', 'video/webm'
+    ]);
+    if (!allowedTypes.has(body.contentType)) {
+      response.status(415).json({ error: 'Supported formats: JPG, PNG, WebP, AVIF, MP4 and WebM.' });
+      return;
+    }
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(body.data) || body.data.length > 14000000) {
+      response.status(400).json({ error: 'The selected file is too large or invalid.' });
+      return;
+    }
+    const fileBytes = Buffer.from(body.data, 'base64');
+    const maxBytes = body.contentType.startsWith('image/') ? 4 * 1024 * 1024 : 10 * 1024 * 1024;
+    if (!fileBytes.length || fileBytes.length > maxBytes) {
+      response.status(413).json({ error: 'Images must be 4 MB or smaller; videos must be 10 MB or smaller.' });
+      return;
+    }
+    const isJpeg = body.contentType === 'image/jpeg' && fileBytes[0] === 0xff && fileBytes[1] === 0xd8 && fileBytes[2] === 0xff;
+    const isPng = body.contentType === 'image/png' && fileBytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    const isWebp = body.contentType === 'image/webp' && fileBytes.toString('ascii', 0, 4) === 'RIFF' && fileBytes.toString('ascii', 8, 12) === 'WEBP';
+    const isAvif = body.contentType === 'image/avif' && fileBytes.toString('ascii', 4, 12).includes('ftypavif');
+    const isMp4 = body.contentType === 'video/mp4' && fileBytes.toString('ascii', 4, 8) === 'ftyp';
+    const isWebm = body.contentType === 'video/webm' && fileBytes.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]));
+    if (!(isJpeg || isPng || isWebp || isAvif || isMp4 || isWebm)) {
+      response.status(415).json({ error: 'The file content does not match its selected format.' });
+      return;
+    }
+
+    const { url, serviceRoleKey } = getSupabaseCredentials();
+    const extensionByType: Record<string, string> = {
+      'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/avif': 'avif',
+      'video/mp4': 'mp4', 'video/webm': 'webm'
+    };
+    const storagePath = `owner/${crypto.randomUUID()}.${extensionByType[body.contentType]}`;
+    const upload = await fetch(`${url}/storage/v1/object/ak-mala-media/${storagePath}`, {
+      method: 'POST',
+      headers: {
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`,
+        'Content-Type': body.contentType,
+        'x-upsert': 'false'
+      },
+      body: fileBytes
+    });
+    if (!upload.ok) {
+      console.error('Owner media upload failed:', upload.status);
+      throw new GatewayError('The media could not be saved to storage.');
+    }
+    response.status(201).json({
+      url: `${url}/storage/v1/object/public/ak-mala-media/${storagePath}`
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to upload media.';
+    const status = message.startsWith('Supabase is not configured') ? 503 : error instanceof GatewayError ? 502 : 403;
+    response.status(status).json({ error: status === 403 ? message : 'The media upload is temporarily unavailable.' });
   }
 });
 
