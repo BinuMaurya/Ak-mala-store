@@ -14,8 +14,7 @@ import {
   BarChart3,
   Sliders,
   CheckCircle2,
-  Layers,
-  Settings
+  Layers
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
@@ -27,7 +26,6 @@ export const Navbar: React.FC = () => {
     setIsCustomBuilderOpen,
     setIsDashboardOpen,
     setIsAuthOpen,
-    setIsAdminOpen,
     setIsGalleryOpen,
     siteAssets,
     user,
