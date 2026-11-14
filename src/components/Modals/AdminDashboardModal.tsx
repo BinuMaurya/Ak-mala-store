@@ -53,7 +53,7 @@ function escapeCsv(value: string): string {
 }
 
 export const AdminDashboardModal: React.FC = () => {
-  const { isDashboardOpen, setIsDashboardOpen, showNotification, allProducts } = useApp();
+  const { isDashboardOpen, setIsDashboardOpen, setIsAdminOpen, showNotification, allProducts } = useApp();
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
   const [waitingForOtp, setWaitingForOtp] = useState(false);
@@ -231,6 +231,14 @@ export const AdminDashboardModal: React.FC = () => {
             <p className="mt-1 text-[11px] text-gray-400">Real consented analytics and saved store orders</p>
           </div>
           <div className="flex items-center gap-2">
+            {accessToken && data && !error && (
+              <button
+                onClick={() => { setIsDashboardOpen(false); setIsAdminOpen(true); }}
+                className="rounded-lg border border-amber-400/40 bg-amber-400/10 px-2.5 py-2 text-xs font-bold text-amber-200"
+              >
+                Admin Studio
+              </button>
+            )}
             {accessToken && (
               <button
                 onClick={() => void supabase?.auth.signOut()}
