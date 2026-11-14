@@ -545,7 +545,7 @@ app.post('/api/orders/cod', async (request: Request, response: Response) => {
     const cartLines = parseCartLines(body.cart);
     const customer = parseCheckoutCustomer(body.customer);
     const visitorId = parseVisitorId(body.visitorId);
-    const orderFields = createStoredOrderFields(cartLines, customer, body.couponCode, visitorId);
+    const orderFields = await createStoredOrderFields(cartLines, customer, body.couponCode, visitorId);
     const [order] = await supabaseRequest<StoredOrder[]>(
       'orders',
       'POST',
