@@ -363,15 +363,7 @@ export const Navbar: React.FC = () => {
               <span>{t('navDashboard')}</span>
             </button>
 
-            {/* Admin CMS Studio Button */}
-            <button
-              onClick={() => setIsAdminOpen(true)}
-              className="px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-400/50 hover:bg-amber-500/25 text-[#E5C158] font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-              title="Open Site CMS to change murti, photos, videos, and offers"
-            >
-              <Settings className="w-3.5 h-3.5" />
-              <span>Admin Studio</span>
-            </button>
+
           </div>
 
           {/* Right festive banner button */}
