@@ -24,6 +24,40 @@ interface GaneshaViewerProps {
   onColorChange?: (color: 'rose' | 'marigold' | 'mogra' | 'orchid' | 'lotus') => void;
 }
 
+function StaticMurtiFallback({ imageUrl }: { imageUrl: string }) {
+  return (
+    <div className="relative w-full h-full flex items-center justify-center overflow-hidden rounded-3xl border border-[#D4AF37]/40 bg-[#090d16]">
+      <img
+        src={imageUrl}
+        alt="Ganpati murti"
+        className="h-full w-full object-cover object-center opacity-95"
+      />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(212,175,55,0.18)_0%,rgba(0,0,0,0)_70%)]" />
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-[#D4AF37]/40 bg-black/60 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#E5C158] backdrop-blur-sm">
+        Divine Darshan
+      </div>
+    </div>
+  );
+}
+
+class GaneshaCanvasErrorBoundary extends React.Component<{
+  children: React.ReactNode;
+  fallback: React.ReactNode;
+}, {
+  hasError: boolean;
+}> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  render() {
+    if (this.state.hasError) return this.props.fallback;
+    return this.props.children;
+  }
+}
+
 // -------------------------------------------------------------
 // 1. DREI LOADING SCREEN (useProgress + Html)
 // -------------------------------------------------------------
@@ -281,55 +315,7 @@ export const GaneshaViewer: React.FC<GaneshaViewerProps> = ({
         {/* Divine Background Radial Glow */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(212,175,55,0.22)_0%,rgba(0,0,0,0)_70%)] pointer-events-none" />
 
-        {/* 3D R3F Canvas */}
-        <Canvas
-          fallback={<TextureLoadingScreen />}
-          dpr={dpr}
-          camera={{ position: [0, 0.2, 4.8], fov: 40 }}
-          gl={{
-            antialias: true,
-            alpha: true,
-            powerPreference: 'high-performance',
-            toneMapping: THREE.ACESFilmicToneMapping,
-            toneMappingExposure: 1.3
-          }}
-          className="w-full h-full cursor-grab active:cursor-grabbing"
-        >
-          {/* PerformanceMonitor to track frame rates and ensure smooth 60fps */}
-          <PerformanceMonitor
-            iterations={6}
-            threshold={0.8}
-            step={0.1}
-            onIncline={(api) => {
-              setDpr(Math.min(window.devicePixelRatio || 1, 2));
-              setLiveFps(Math.round(api.fps));
-              setFpsTier('60fps Locked');
-            }}
-            onDecline={(api) => {
-              setDpr(1);
-              setLiveFps(Math.round(api.fps));
-              setFpsTier('Optimal 60fps');
-            }}
-            onChange={(api) => {
-              setLiveFps(Math.round(api.fps));
-            }}
-          />
-
-          <CameraController activeAngle={activeAngle} />
-
-          {/* Lighting */}
-          <ambientLight color="#fff3d6" intensity={1.4} />
-          <directionalLight position={[3, 4, 4]} color="#ffecd1" intensity={2.4} />
-          <directionalLight position={[-3, 3, -2]} color="#d4af37" intensity={2.0} />
-          <directionalLight position={[0, -2, 3]} color="#e5c158" intensity={1.2} />
-
-          <GaneshaShrine
-            key={murtiTextureUrl}
-            textureUrl={murtiTextureUrl}
-          />
-          <FloatingPetals count={50} show={showPetals} />
-
-        </Canvas>
+        <StaticMurtiFallback imageUrl={murtiTextureUrl} />
 
         {/* Top Left 360° Drag Indicator Pill */}
         <div className="absolute top-4 left-4 z-10 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/65 border border-[#D4AF37]/45 backdrop-blur-md text-xs text-amber-200">
