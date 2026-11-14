@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { supabase } from '../../services/supabase';
 import { Product, MediaItem, VideoItem } from '../../types';
 import { MediaGalleryPickerModal } from './MediaGalleryPickerModal';
 import { MediaStudioSection } from './MediaStudioSection';
@@ -59,6 +60,41 @@ export const AdminPanelModal: React.FC = () => {
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'media_studio' | 'murti' | 'products' | 'offers' | 'videos' | 'gallery' | 'plugins'>('media_studio');
+  const [ownerAuthorized, setOwnerAuthorized] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!isAdminOpen) {
+      setOwnerAuthorized(false);
+      setAuthChecked(false);
+      return;
+    }
+    const verifyOwnerAccess = async () => {
+      if (!supabase) {
+        if (!cancelled) setAuthChecked(true);
+        return;
+      }
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) {
+        if (!cancelled) setAuthChecked(true);
+        return;
+      }
+      try {
+        const response = await fetch('/api/admin/data', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!cancelled) setOwnerAuthorized(response.ok);
+      } catch {
+        if (!cancelled) setOwnerAuthorized(false);
+      } finally {
+        if (!cancelled) setAuthChecked(true);
+      }
+    };
+    void verifyOwnerAccess();
+    return () => { cancelled = true; };
+  }, [isAdminOpen]);
   const [pluginStatus, setPluginStatus] = useState<{ gemini: boolean; supabase: boolean; razorpay: boolean } | null>(null);
   const [pluginStatusError, setPluginStatusError] = useState(false);
   const [pluginRefresh, setPluginRefresh] = useState(0);
@@ -200,7 +236,7 @@ export const AdminPanelModal: React.FC = () => {
     category: 'Aarti'
   });
 
-  if (!isAdminOpen) return null;
+  if (!isAdminOpen || !authChecked || !ownerAuthorized) return null;
 
   // Preset Murti Presets
   const murtiPresets = [
