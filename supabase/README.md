@@ -7,10 +7,11 @@ security enabled with no public policies; only the server accesses them.
 ## Configure the project
 
 1. Create a Supabase project and run `schema.sql` in its SQL Editor.
-2. In Authentication, enable email OTP/magic-link sign-in. Add the deployed
+2. After that, run `store_products.sql` in the same SQL Editor. This creates the shared product catalogue with public read-only access; all changes are written by the server only after owner verification.
+3. In Authentication, enable email OTP/magic-link sign-in. Add the deployed
    website URL to the allowed redirect URLs. Add the owner's verified email
    under Authentication > Users; owner sign-in does not allow public account creation.
-3. Create a local `.env` file (it is ignored by Git) with:
+4. Create a local `.env` file (it is ignored by Git) with:
 
    ```env
    SUPABASE_URL=https://YOUR_PROJECT.supabase.co
@@ -21,9 +22,9 @@ security enabled with no public policies; only the server accesses them.
    VITE_SUPABASE_ANON_KEY=YOUR_PUBLIC_ANON_KEY
    ```
 
-4. Configure the same variables as server-side secrets in production. Never
+5. Configure the same variables as server-side secrets in production. Never
    put `SUPABASE_SERVICE_ROLE_KEY` in a `VITE_*` variable or browser code.
-5. Configure Razorpay separately using the server-side variables in
+6. Configure Razorpay separately using the server-side variables in
    `.env.example`.
 
 `ADMIN_EMAILS` is a comma-separated allowlist of verified owner email
