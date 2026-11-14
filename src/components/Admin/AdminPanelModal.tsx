@@ -139,7 +139,8 @@ export const AdminPanelModal: React.FC = () => {
       showNotification('Images must be 4 MB or smaller; videos must be 10 MB or smaller.');
       return;
     }
-    if (!supabase) {
+    const supabaseClient = supabase;
+    if (!supabaseClient) {
       showNotification('Owner database connection is not configured.');
       return;
     }
@@ -151,7 +152,7 @@ export const AdminPanelModal: React.FC = () => {
         return;
       }
       try {
-        const { data } = await supabase.auth.getSession();
+        const { data } = await supabaseClient.auth.getSession();
         const token = data.session?.access_token;
         if (!token) {
           showNotification('Please sign in with the owner account again.');
