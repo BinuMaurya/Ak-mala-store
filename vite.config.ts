@@ -27,13 +27,12 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
-      allowedHosts: ['workspace-yzpiqxgw.v0.build'],
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modify—file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
-      allowedHosts: true, // Yahan 'allowedHosts: true' add karne se sabhi v0/vercel hosts allow ho jayenge
+      allowedHosts: true, // Sabhi v0/vercel hosts ko allow karne ke liye
     },
   };
 });
