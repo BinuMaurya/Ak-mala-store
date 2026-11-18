@@ -1,6 +1,8 @@
-import { supabase } from './supabaseClient';
+import { supabase } from './supabase';
 
 export async function uploadStoreMedia(file: File): Promise<string> {
+  if (!supabase) throw new Error('Media uploads require Supabase configuration.');
+
   const fileExt = file.name.split('.').pop();
   const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
   const filePath = `uploads/${fileName}`;
