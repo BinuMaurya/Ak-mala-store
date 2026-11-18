@@ -145,7 +145,7 @@ export const AdminDashboardModal: React.FC = () => {
   const sendOwnerCode = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!supabase) {
-      setError('Owner sign-in is not configured. Add the VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY settings.');
+      setError('Owner sign-in is not configured. Add SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY to the build environment, or set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY overrides.');
       return;
     }
     setLoading(true);

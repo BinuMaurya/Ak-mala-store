@@ -130,4 +130,11 @@ export interface SiteAssetsConfig {
   brandTagline: string;
 }
 
+export interface StoreContent {
+  products: Product[];
+  siteAssets: SiteAssetsConfig;
+  galleryItems: MediaItem[];
+  videosList: VideoItem[];
+}
+
 export type Language = 'en' | 'hi' | 'mr' | 'gu';

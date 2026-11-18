@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { Product, MediaItem, VideoItem } from '../../types';
 import { MediaGalleryPickerModal } from './MediaGalleryPickerModal';
 import { MediaStudioSection } from './MediaStudioSection';
+import { uploadStoreMedia } from '../../services/mediaStorage';
 import {
   X,
   Settings,
@@ -86,19 +87,18 @@ export const AdminPanelModal: React.FC = () => {
     };
   }, [activeTab, pluginRefresh]);
 
-  // Universal local file upload reader helper
+  // Upload selected media to shared storage before applying it.
   const handleLocalFileUpload = (
     e: React.ChangeEvent<HTMLInputElement>,
-    onComplete: (dataUrl: string) => void
+    onComplete: (mediaUrl: string) => void
   ) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      onComplete(dataUrl);
-    };
-    reader.readAsDataURL(file);
+    void uploadStoreMedia(file)
+      .then(onComplete)
+      .catch((error: unknown) => {
+        showNotification(error instanceof Error ? error.message : 'Media upload failed.');
+      });
   };
 
   // Media Gallery Picker Modal state
@@ -400,10 +400,10 @@ export const AdminPanelModal: React.FC = () => {
                 {[
                   {
                     name: 'Supabase',
-                    description: 'Store database, orders, and server-side analytics storage.',
+                    description: 'Shared catalog, public media, orders, and server-side analytics.',
                     icon: Database,
                     ready: pluginStatus?.supabase,
-                    variables: 'SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY'
+                    variables: 'SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_KEY, ADMIN_EMAILS'
                   },
                   {
                     name: 'Razorpay',

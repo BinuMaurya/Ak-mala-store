@@ -311,16 +311,16 @@ export const GaneshaViewer: React.FC<GaneshaViewerProps> = ({
   return (
     <div className="flex flex-col w-full">
       {/* 3D WebGL Canvas Container */}
-      <div className="relative w-full h-[470px] lg:h-[530px] flex items-center justify-center select-none overflow-hidden rounded-3xl border-2 border-[#D4AF37]/40 bg-radial from-[#151c2e] via-[#090d16] to-[#030712] shadow-2xl">
+      <div className="relative w-full h-[360px] sm:h-[420px] lg:h-[530px] flex items-center justify-center select-none overflow-hidden rounded-3xl border-2 border-[#D4AF37]/40 bg-radial from-[#151c2e] via-[#090d16] to-[#030712] shadow-2xl">
         {/* Divine Background Radial Glow */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(212,175,55,0.22)_0%,rgba(0,0,0,0)_70%)] pointer-events-none" />
 
         <StaticMurtiFallback imageUrl={murtiTextureUrl} />
 
         {/* Top Left 360° Drag Indicator Pill */}
-        <div className="absolute top-4 left-4 z-10 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/65 border border-[#D4AF37]/45 backdrop-blur-md text-xs text-amber-200">
+        <div className="absolute top-4 left-4 z-10 flex max-w-[calc(100%-4.5rem)] items-center gap-2 px-3 py-1.5 rounded-full bg-black/65 border border-[#D4AF37]/45 backdrop-blur-md text-xs text-amber-200">
           <Rotate3D className="w-3.5 h-3.5 text-[#E5C158]" />
-          <span className="font-semibold tracking-wide">Ganpati Bappa • Murti Darshan</span>
+          <span className="truncate font-semibold tracking-wide">Ganpati Bappa • Murti Darshan</span>
         </div>
 
         {/* Top Right Petal Control */}
@@ -340,7 +340,7 @@ export const GaneshaViewer: React.FC<GaneshaViewerProps> = ({
         </div>
 
         {/* Bottom Preset Angle Buttons */}
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 p-1 rounded-2xl bg-black/75 border border-[#D4AF37]/35 backdrop-blur-lg shadow-xl">
+        <div className="absolute bottom-3 left-1/2 z-10 grid w-[calc(100%-5rem)] max-w-[17rem] -translate-x-1/2 grid-cols-2 items-center gap-1 p-1 rounded-2xl bg-black/75 border border-[#D4AF37]/35 backdrop-blur-lg shadow-xl sm:bottom-4 sm:flex sm:w-auto sm:max-w-none sm:gap-1.5">
           <button
             onClick={() => setActiveAngle('darshan')}
             className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 ${

@@ -1,14 +1,14 @@
 # AK MALA Supabase setup
 
-This app stores orders and consented, pseudonymous analytics in Supabase. The
-browser never receives the service-role key. Orders and analytics have row-level
-security enabled with no public policies; only the server accesses them.
+This app stores orders, consented analytics, shared catalog content, and uploaded
+media in Supabase. The browser never receives the server-only secret key.
 
 ## Configure the project
 
-1. Create a Supabase project and run `schema.sql` in its SQL Editor.
-   For an existing project, run `migrations/20261111_delivery_otp.sql` to add
-   the delivery OTP fields before using delivery confirmation.
+1. Create a Supabase project and run `schema.sql` in its SQL Editor. Then run
+   `migrations/20261115_shared_store_content.sql` to create the shared catalog
+   table and public media bucket. For an existing project, also run
+   `migrations/20261111_delivery_otp.sql` before using delivery confirmation.
 2. In Authentication, enable email OTP/magic-link sign-in. Add the deployed
    website URL to the allowed redirect URLs. Add the owner's verified email
    under Authentication > Users; owner sign-in does not allow public account creation.
@@ -16,12 +16,15 @@ security enabled with no public policies; only the server accesses them.
 
    ```env
    SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-   SUPABASE_ANON_KEY=YOUR_PUBLIC_ANON_KEY
+   SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLISHABLE_KEY
    SUPABASE_SECRET_KEY=YOUR_SERVER_ONLY_SECRET_KEY
    ADMIN_EMAILS=owner@example.com
-   VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-   VITE_SUPABASE_ANON_KEY=YOUR_PUBLIC_ANON_KEY
    ```
+
+   The Vite build uses `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` for browser
+   OTP by default. `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` can override
+   those public values. Legacy `SUPABASE_ANON_KEY` is also accepted. Never put
+   `SUPABASE_SECRET_KEY` or `SUPABASE_SERVICE_ROLE_KEY` in a `VITE_*` variable.
 
 4. Configure the same variables as server-side secrets in production. Never
    put `SUPABASE_SECRET_KEY` or `SUPABASE_SERVICE_ROLE_KEY` in a `VITE_*`
@@ -70,4 +73,8 @@ not collected. Publish an accurate privacy notice and retention policy before
 launching the site publicly.
 
 The production host must run `server.ts` (not a static-only Vite deployment)
-for payment, order, analytics, and owner-dashboard APIs.
+for payment, order, analytics, owner-dashboard, shared catalog, and signed media
+upload APIs. Catalog changes are stored in Supabase so all visitors see them;
+uploaded images and videos are stored in the `ak-mala-media` public bucket.
+Files are limited to 50 MB. In production, set `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`,
+`SUPABASE_SECRET_KEY`, and `ADMIN_EMAILS` for Production, then redeploy.

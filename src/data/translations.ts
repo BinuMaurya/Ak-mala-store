@@ -27,7 +27,6 @@ export const translations: Record<Language, Record<string, string>> = {
     shopCollection: "Explore Sacred Collections",
     customizeMala: "Build Custom Mala",
     darshan3d: "Interactive 3D Darshan",
-    rotateInstruction: "Drag to rotate in 360° | Pinch/Scroll to zoom",
     bestSellerBadge: "BEST SELLER",
     festiveBadge: "GANPATI SPECIAL",
     addToCart: "ADD TO CART",

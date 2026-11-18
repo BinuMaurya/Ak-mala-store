@@ -7,7 +7,8 @@ import {
   CustomMalaConfig,
   MediaItem,
   VideoItem,
-  SiteAssetsConfig
+  SiteAssetsConfig,
+  StoreContent
 } from '../types';
 import { products } from '../data/products';
 import { translations } from '../data/translations';
@@ -153,53 +154,12 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // 1. Dynamic Products with localStorage persistence
-  const [allProducts, setAllProducts] = useState<Product[]>(() => {
-    try {
-      const saved = localStorage.getItem('ak_mala_products');
-      return saved ? JSON.parse(saved) : products;
-    } catch {
-      return products;
-    }
-  });
-
-  // 2. Site Assets & CMS Config (Ganpati Murti, Hero Headlines, Offers, Thali photo)
-  const [siteAssets, setSiteAssets] = useState<SiteAssetsConfig>(() => {
-    try {
-      const saved = localStorage.getItem('ak_mala_site_assets');
-      if (!saved) return defaultSiteAssets;
-
-      const savedAssets = JSON.parse(saved) as Partial<SiteAssetsConfig>;
-      const migratedAssets =
-        savedAssets.heroGaneshaImage === '/ganpati_darshan.jpg'
-          ? { ...savedAssets, heroGaneshaImage: defaultSiteAssets.heroGaneshaImage }
-          : savedAssets;
-
-      return { ...defaultSiteAssets, ...migratedAssets };
-    } catch {
-      return defaultSiteAssets;
-    }
-  });
-
-  // 3. 1000+ Gallery Items with localStorage persistence
-  const [galleryItems, setGalleryItems] = useState<MediaItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('ak_mala_gallery');
-      return saved ? JSON.parse(saved) : initialGalleryItems;
-    } catch {
-      return initialGalleryItems;
-    }
-  });
-
-  // 4. Videos List with localStorage persistence
-  const [videosList, setVideosList] = useState<VideoItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('ak_mala_videos');
-      return saved ? JSON.parse(saved) : defaultVideos;
-    } catch {
-      return defaultVideos;
-    }
-  });
+  const [allProducts, setAllProducts] = useState<Product[]>(products);
+  const [siteAssets, setSiteAssets] = useState<SiteAssetsConfig>(defaultSiteAssets);
+  const [galleryItems, setGalleryItems] = useState<MediaItem[]>(initialGalleryItems);
+  const [videosList, setVideosList] = useState<VideoItem[]>(defaultVideos);
+  const [storeContentReady, setStoreContentReady] = useState(false);
+  const storeContentSaveQueue = React.useRef<Promise<void>>(Promise.resolve());
 
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -282,29 +242,75 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeTrackingId, setActiveTrackingId] = useState<string>('');
   const [notification, setNotification] = useState<string | null>(null);
 
-  // Sync to localStorage
   useEffect(() => {
-    localStorage.setItem('ak_mala_products', JSON.stringify(allProducts));
-  }, [allProducts]);
+    if (storeContentReady) return;
+    let active = true;
+    void fetch('/api/store/content')
+      .then(async (response) => {
+        const result = await response.json() as { content?: StoreContent | null; error?: string };
+        if (!response.ok) throw new Error(result.error || 'Shared store content could not be loaded.');
+        if (result.content) {
+          const content = result.content;
+          if (
+            !Array.isArray(content.products) ||
+            !content.siteAssets ||
+            !Array.isArray(content.galleryItems) ||
+            !Array.isArray(content.videosList)
+          ) {
+            throw new Error('Shared store content has an invalid format.');
+          }
+          if (active) {
+            setAllProducts(content.products);
+            setSiteAssets(content.siteAssets);
+            setGalleryItems(content.galleryItems);
+            setVideosList(content.videosList);
+          }
+        }
+        if (active) setStoreContentReady(true);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        console.error('Could not load shared store content:', error);
+        if (isOwner) {
+          showNotification('Shared catalog is unavailable. Run the Supabase migration before publishing changes.');
+        }
+      });
+
+    return () => { active = false; };
+  }, [storeContentReady, isOwner]);
 
   useEffect(() => {
-    localStorage.setItem('ak_mala_site_assets', JSON.stringify(siteAssets));
-  }, [siteAssets]);
+    if (!storeContentReady || !isOwner) return;
+    const content: StoreContent = { products: allProducts, siteAssets, galleryItems, videosList };
+    const timeout = window.setTimeout(() => {
+      storeContentSaveQueue.current = storeContentSaveQueue.current
+        .catch(() => undefined)
+        .then(async () => {
+          if (!supabase) throw new Error('Supabase owner sign-in is not configured.');
+          const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+          if (sessionError) throw sessionError;
+          const accessToken = sessionData.session?.access_token;
+          if (!accessToken) throw new Error('Owner sign-in expired. Sign in again to publish changes.');
 
-  useEffect(() => {
-    // Only cache if under a reasonable storage size
-    try {
-      if (galleryItems.length <= 150) {
-        localStorage.setItem('ak_mala_gallery', JSON.stringify(galleryItems));
-      }
-    } catch (e) {
-      console.warn('Gallery storage overflow, caching in memory', e);
-    }
-  }, [galleryItems]);
-
-  useEffect(() => {
-    localStorage.setItem('ak_mala_videos', JSON.stringify(videosList));
-  }, [videosList]);
+          const response = await fetch('/api/admin/content', {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`
+            },
+            body: JSON.stringify({ content })
+          });
+          const result = await response.json() as { error?: string };
+          if (!response.ok) throw new Error(result.error || 'Shared store changes could not be saved.');
+          showNotification('Store changes are saved and live for all visitors.');
+        })
+        .catch((error: unknown) => {
+          console.error('Could not save shared store content:', error);
+          showNotification(error instanceof Error ? error.message : 'Shared store changes could not be saved.');
+        });
+    }, 700);
+    return () => window.clearTimeout(timeout);
+  }, [storeContentReady, isOwner, allProducts, siteAssets, galleryItems, videosList]);
 
   useEffect(() => {
     localStorage.setItem('ak_mala_cart', JSON.stringify(cart));

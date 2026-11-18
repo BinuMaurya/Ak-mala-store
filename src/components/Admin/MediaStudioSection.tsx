@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { MediaItem, Product, VideoItem } from '../../types';
+import { uploadStoreMedia } from '../../services/mediaStorage';
 import {
   Upload,
   RefreshCw,
@@ -68,6 +69,7 @@ export const MediaStudioSection: React.FC<MediaStudioSectionProps> = ({
   const [uploadDuration, setUploadDuration] = useState('2:15');
   const [uploadPrice, setUploadPrice] = useState(599);
   const [fileName, setFileName] = useState('');
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
 
   // 2. Replace Form States
   const [replaceTargetType, setReplaceTargetType] = useState<'murti' | 'gallery' | 'product' | 'video'>('murti');
@@ -79,10 +81,10 @@ export const MediaStudioSection: React.FC<MediaStudioSectionProps> = ({
   const [deleteFilter, setDeleteFilter] = useState<'all' | 'gallery' | 'product' | 'video'>('all');
   const [deleteSearchQuery, setDeleteSearchQuery] = useState('');
 
-  // Universal File Reader Helper (handles local files -> base64 data URIs)
+  // Upload selected media to shared storage before adding it to the catalog.
   const handleLocalFileInput = (
     e: React.ChangeEvent<HTMLInputElement>,
-    onComplete: (dataUrl: string, file: File) => void
+    onComplete: (mediaUrl: string, file: File) => void
   ) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -91,12 +93,13 @@ export const MediaStudioSection: React.FC<MediaStudioSectionProps> = ({
     if (isVid) {
       setUploadMediaKind('video');
     }
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
-      onComplete(result, file);
-    };
-    reader.readAsDataURL(file);
+    setIsUploadingMedia(true);
+    void uploadStoreMedia(file)
+      .then((mediaUrl) => onComplete(mediaUrl, file))
+      .catch((error: unknown) => {
+        showNotification(error instanceof Error ? error.message : 'Media upload failed.');
+      })
+      .finally(() => setIsUploadingMedia(false));
   };
 
   // Execute Upload
@@ -424,7 +427,7 @@ export const MediaStudioSection: React.FC<MediaStudioSectionProps> = ({
                     Supports JPG, PNG, WEBP, GIF, and MP4/WEBM videos
                   </p>
                   <label className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black font-extrabold text-xs uppercase shadow cursor-pointer hover:scale-105 transition-transform">
-                    <span>Browse Local Files</span>
+                    <span>Upload File</span>
                     <input
                       type="file"
                       accept="image/*,video/*"
@@ -495,15 +498,15 @@ export const MediaStudioSection: React.FC<MediaStudioSectionProps> = ({
                     <option value="customer_photos">Customer Temple Photos</option>
                     <option value="temple_events">Grand Temple Celebrations</option>
                     <option value="artisan_handcraft">Artisan Garland Weaving</option>
-                    <option value="varmala_wedding">Royal Wedding Varmala</option>
                   </select>
                 </div>
                 <div>
-                  <label className="font-bold text-gray-300 block mb-1">Location / Temple:</label>
+                  <label className="font-bold text-gray-300 block mb-1">Location / Tag:</label>
                   <input
                     type="text"
                     value={uploadLocation}
                     onChange={(e) => setUploadLocation(e.target.value)}
+                    placeholder="Mumbai Temple Pandal"
                     className="w-full p-2.5 rounded-xl bg-black/60 border border-white/20 text-white text-xs"
                   />
                 </div>
@@ -513,386 +516,341 @@ export const MediaStudioSection: React.FC<MediaStudioSectionProps> = ({
             {uploadTarget === 'product' && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bold text-gray-300 block mb-1">Selling Price (₹):</label>
+                  <label className="font-bold text-gray-300 block mb-1">Price (₹):</label>
                   <input
                     type="number"
                     value={uploadPrice}
                     onChange={(e) => setUploadPrice(Number(e.target.value))}
-                    className="w-full p-2.5 rounded-xl bg-black/60 border border-white/20 text-white text-xs"
+                    className="w-full p-2.5 rounded-xl bg-black/60 border border-white/20 text-white text-xs font-mono"
                   />
                 </div>
                 <div>
-                  <label className="font-bold text-gray-300 block mb-1">Flower Category:</label>
+                  <label className="font-bold text-gray-300 block mb-1">Category:</label>
                   <select
                     value={uploadCategory}
                     onChange={(e) => setUploadCategory(e.target.value)}
                     className="w-full p-2.5 rounded-xl bg-black/60 border border-white/20 text-white text-xs"
                   >
-                    <option value="rose">Dutch Red Rose</option>
-                    <option value="mogra">Madurai Mogra</option>
-                    <option value="marigold">Yellow Genda</option>
-                    <option value="festive">Ganpati Special</option>
-                    <option value="temple">Grand Temple (36")</option>
+                    <option value="festive">Festive Garland</option>
+                    <option value="traditional">Traditional Mala</option>
+                    <option value="premium">Premium Devotional</option>
                   </select>
                 </div>
               </div>
             )}
 
-            {uploadTarget === 'video' && (
+            {(uploadTarget === 'video' || (uploadTarget === 'gallery' && uploadMediaKind === 'video')) && (
               <div>
-                <label className="font-bold text-gray-300 block mb-1">Video Duration (e.g. 2:15):</label>
+                <label className="font-bold text-gray-300 block mb-1">Video Duration:</label>
                 <input
                   type="text"
                   value={uploadDuration}
                   onChange={(e) => setUploadDuration(e.target.value)}
-                  className="w-full p-2.5 rounded-xl bg-black/60 border border-white/20 text-white text-xs"
+                  placeholder="2:15"
+                  className="w-full p-2.5 rounded-xl bg-black/60 border border-white/20 text-white text-xs font-mono"
                 />
               </div>
             )}
 
-            {/* Publish Button */}
             <button
               type="submit"
-              disabled={!uploadUrl}
-              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black font-black text-xs uppercase tracking-wider shadow-lg hover:opacity-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed mt-2"
+              disabled={isUploadingMedia}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-[#D4AF37] via-amber-400 to-[#E5C158] text-black font-extrabold text-xs uppercase tracking-wider shadow-lg hover:brightness-110 transition-all cursor-pointer flex items-center justify-center gap-2"
             >
-              <Upload className="w-4 h-4 stroke-[2.5]" />
-              <span>Upload & Publish to {uploadTarget.toUpperCase()}</span>
+              {isUploadingMedia ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Uploading Media to Secure Storage...</span>
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4" />
+                  <span>Execute Upload & Live Sync</span>
+                </>
+              )}
             </button>
           </div>
 
-          {/* Right Column: Live Upload Preview (5 cols) */}
-          <div className="lg:col-span-5 p-4 rounded-3xl bg-black/60 border border-amber-500/30 text-center space-y-3">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 block">
-              Live Upload Preview
-            </span>
-
-            <div className="relative h-64 rounded-2xl overflow-hidden border border-amber-500/40 bg-black flex items-center justify-center">
+          {/* Right Column: Live Preview (5 cols) */}
+          <div className="lg:col-span-5 p-4 rounded-2xl bg-black/60 border border-amber-500/30 space-y-3 sticky top-4">
+            <h5 className="font-bold text-amber-300 text-xs flex items-center gap-1.5 uppercase tracking-wider">
+              <Eye className="w-4 h-4" />
+              <span>Live Upload Preview</span>
+            </h5>
+            
+            <div className="aspect-video rounded-xl bg-black border border-white/10 overflow-hidden relative flex items-center justify-center">
               {uploadUrl ? (
-                uploadMediaKind === 'video' && uploadUrl.startsWith('data:video') ? (
+                uploadMediaKind === 'video' ? (
                   <video src={uploadUrl} controls className="w-full h-full object-cover" />
                 ) : (
-                  <img src={uploadUrl} alt="Upload preview" className="w-full h-full object-cover" />
+                  <img src={uploadUrl} alt="Upload Preview" className="w-full h-full object-cover" />
                 )
               ) : (
-                <div className="text-gray-500 space-y-2 p-4">
-                  <Camera className="w-10 h-10 mx-auto text-amber-500/40" />
-                  <p className="text-xs">No media uploaded yet.</p>
-                  <p className="text-[11px] text-gray-500">
-                    Select a local file or paste a URL on the left to see instant preview.
-                  </p>
-                </div>
-              )}
-
-              {uploadUrl && (
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-3 text-left">
-                  <span className="text-[10px] bg-amber-400 text-black font-extrabold px-1.5 py-0.5 rounded uppercase">
-                    Target: {uploadTarget}
-                  </span>
-                  <p className="text-xs font-bold text-white mt-1 truncate">
-                    {uploadTitle || 'Ready to Publish'}
-                  </p>
+                <div className="text-center p-4 text-gray-500">
+                  <Camera className="w-8 h-8 mx-auto mb-1 opacity-40" />
+                  <p className="text-[11px]">Upload a file or paste URL to preview</p>
                 </div>
               )}
             </div>
 
-            {uploadTarget === 'murti' && (
-              <p className="text-[11px] text-amber-300/80 bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20 text-left">
-                ✨ <strong>Instant 3D Hero Sync:</strong> Publishing here immediately binds this texture to the 3D rotating Ganesha shrine on the homepage!
-              </p>
-            )}
+            <div className="space-y-1.5 text-xs text-gray-300">
+              <div className="flex justify-between border-b border-white/5 pb-1">
+                <span className="text-gray-400">Target Destination:</span>
+                <span className="font-bold text-amber-300 capitalize">{uploadTarget}</span>
+              </div>
+              <div className="flex justify-between border-b border-white/5 pb-1">
+                <span className="text-gray-400">Media Type:</span>
+                <span className="font-bold uppercase text-white">{uploadMediaKind}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Sync Status:</span>
+                <span className="text-emerald-400 font-bold">Ready for Live Sync</span>
+              </div>
+            </div>
           </div>
-
         </form>
       )}
 
       {/* =========================================
-          SUB-TAB 2: REPLACE MEDIA WIZARD
+          SUB-TAB 2: REPLACE MEDIA
          ========================================= */}
       {activeSubTab === 'replace' && (
-        <div className="space-y-6 text-xs">
-          
-          {/* Step 1: Select Target Type */}
-          <div className="p-4 rounded-2xl bg-black/40 border border-white/10 space-y-3">
-            <label className="font-bold text-gray-200 block">
-              Step 1: What would you like to replace?
-            </label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {[
-                { id: 'murti', label: '🕉️ 3D Hero Ganpati Murti', desc: 'Main deity idol' },
-                { id: 'gallery', label: '📷 Gallery Photo/Video', desc: 'From 1,000+ items' },
-                { id: 'product', label: '🌺 Product Garland Photo', desc: 'From catalog' },
-                { id: 'video', label: '🎬 Video Reel / Clip', desc: 'Temple & Darshan' },
-              ].map((t) => {
-                const isSelected = replaceTargetType === t.id;
-                return (
-                  <button
-                    type="button"
-                    key={t.id}
-                    onClick={() => {
-                      setReplaceTargetType(t.id as any);
-                      setSelectedReplaceId('');
-                      setReplaceNewUrl('');
-                    }}
-                    className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
-                      isSelected
-                        ? 'bg-amber-500/20 border-amber-400 text-amber-200 ring-1 ring-amber-400'
-                        : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    <span className="font-bold text-xs block text-white">{t.label}</span>
-                    <span className="text-[10px] text-gray-400">{t.desc}</span>
-                  </button>
-                );
-              })}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          <div className="lg:col-span-7 space-y-4 text-xs">
+            <div>
+              <label className="font-bold text-gray-200 block mb-1.5">
+                Select Asset Category to Replace:
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {[
+                  { id: 'murti', label: '3D Hero Murti', icon: Sparkles },
+                  { id: 'gallery', label: 'Gallery Item', icon: Layers },
+                  { id: 'product', label: 'Product Photo', icon: ShoppingBag },
+                  { id: 'video', label: 'Video Item', icon: Film },
+                ].map((item) => {
+                  const Icon = item.icon;
+                  const isSelected = replaceTargetType === item.id;
+                  return (
+                    <button
+                      type="button"
+                      key={item.id}
+                      onClick={() => {
+                        setReplaceTargetType(item.id as any);
+                        setSelectedReplaceId('');
+                      }}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                        isSelected
+                          ? 'bg-amber-500/20 border-amber-400 text-amber-200 ring-1 ring-amber-400'
+                          : 'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <Icon className="w-4 h-4 text-amber-400" />
+                        {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-amber-300" />}
+                      </div>
+                      <span className="font-bold text-xs text-white">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
 
-          {/* Step 2: Choose which specific item to replace (if not Murti) */}
-          {replaceTargetType !== 'murti' && (
-            <div className="p-4 rounded-2xl bg-black/40 border border-white/10 space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="font-bold text-gray-200">
-                  Step 2: Select the specific {replaceTargetType} to replace:
+            {replaceTargetType !== 'murti' && (
+              <div className="space-y-2">
+                <label className="font-bold text-gray-200 block">
+                  Search & Select {replaceTargetType} to Replace:
                 </label>
-                <div className="relative w-60">
+                <div className="relative">
+                  <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
                   <input
                     type="text"
                     value={replaceSearchQuery}
                     onChange={(e) => setReplaceSearchQuery(e.target.value)}
                     placeholder="Search by title..."
-                    className="w-full pl-8 pr-2.5 py-1.5 rounded-lg bg-black border border-white/20 text-xs text-white"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-black/60 border border-white/20 text-white text-xs"
                   />
-                  <Search className="w-3.5 h-3.5 text-amber-400 absolute left-2.5 top-2" />
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2.5 max-h-48 overflow-y-auto pr-1">
-                {(replaceTargetType === 'gallery' ? galleryItems : replaceTargetType === 'product' ? allProducts : videosList)
-                  .filter((item: any) =>
-                    !replaceSearchQuery.trim() ||
-                    (item.title || item.name).toLowerCase().includes(replaceSearchQuery.toLowerCase())
+                <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
+                  {(replaceTargetType === 'gallery'
+                    ? galleryItems
+                    : replaceTargetType === 'product'
+                    ? allProducts
+                    : videosList
                   )
-                  .slice(0, 30)
-                  .map((item: any) => {
-                    const isSelected = selectedReplaceId === item.id;
-                    const img = item.thumbnailUrl || item.url || item.image;
-                    return (
-                      <div
-                        key={item.id}
-                        onClick={() => setSelectedReplaceId(item.id)}
-                        className={`p-2 rounded-xl border text-center cursor-pointer transition-all ${
-                          isSelected
-                            ? 'bg-amber-500/20 border-amber-400 ring-2 ring-amber-400/80 text-white'
-                            : 'bg-white/5 border-white/10 hover:border-white/25 text-gray-400'
-                        }`}
-                      >
-                        <img src={img} alt={item.title || item.name} className="w-full h-16 object-cover rounded-lg mb-1" />
-                        <span className="text-[10px] font-bold line-clamp-1 text-white block">
-                          {item.title || item.name}
-                        </span>
-                      </div>
-                    );
-                  })}
+                    .filter((item: any) =>
+                      (item.title || item.name || '')
+                        .toLowerCase()
+                        .includes(replaceSearchQuery.toLowerCase())
+                    )
+                    .map((item: any) => {
+                      const itemId = item.id;
+                      const itemTitle = item.title || item.name;
+                      const itemImg = item.url || item.image;
+                      const isSelected = selectedReplaceId === itemId;
+                      return (
+                        <div
+                          key={itemId}
+                          onClick={() => setSelectedReplaceId(itemId)}
+                          className={`p-2 rounded-xl flex items-center gap-3 cursor-pointer border transition-all ${
+                            isSelected
+                              ? 'bg-amber-500/20 border-amber-400 text-white'
+                              : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10'
+                          }`}
+                        >
+                          <img src={itemImg} alt="" className="w-10 h-10 rounded-lg object-cover" />
+                          <div className="flex-1 truncate">
+                            <div className="font-bold truncate">{itemTitle}</div>
+                            <div className="text-[10px] text-gray-400 font-mono">ID: {itemId}</div>
+                          </div>
+                          {isSelected && <Check className="w-4 h-4 text-amber-400 shrink-0" />}
+                        </div>
+                      );
+                    })}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Step 3: Provide New Image/Video (Local file upload, URL, or Gallery Pick) */}
-          <div className="p-4 rounded-2xl bg-black/40 border border-white/10 space-y-3">
-            <label className="font-bold text-gray-200 block">
-              Step 3: Provide the New Replacement Photo or Video:
-            </label>
-
-            <div className="flex flex-col sm:flex-row items-center gap-3">
-              {/* Local File Selector */}
-              <label className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-600/30 border border-amber-400/60 text-amber-200 font-bold text-xs flex items-center gap-2 cursor-pointer hover:bg-amber-500/30 whitespace-nowrap shadow-sm">
-                <Upload className="w-4 h-4 text-amber-400" />
-                <span>Upload New File from Device</span>
+            <div className="space-y-2">
+              <label className="font-bold text-gray-200 block">New Replacement Media URL or File:</label>
+              <div className="flex gap-2">
                 <input
-                  type="file"
-                  accept="image/*,video/*"
-                  className="hidden"
-                  onChange={(e) => handleLocalFileInput(e, (dataUrl) => setReplaceNewUrl(dataUrl))}
+                  type="url"
+                  value={replaceNewUrl}
+                  onChange={(e) => setReplaceNewUrl(e.target.value)}
+                  placeholder="https://..."
+                  className="flex-1 p-2.5 rounded-xl bg-black/60 border border-white/20 text-white font-mono text-xs"
                 />
-              </label>
-
-              <span className="text-gray-500 font-bold text-xs">OR</span>
-
-              {/* URL Input */}
-              <input
-                type="url"
-                value={replaceNewUrl}
-                onChange={(e) => setReplaceNewUrl(e.target.value)}
-                placeholder="Paste new Image / Video URL..."
-                className="flex-1 p-2.5 rounded-xl bg-black border border-white/20 text-white font-mono text-xs"
-              />
-
-              {/* Gallery Pick button */}
-              <button
-                type="button"
-                onClick={() =>
-                  onOpenGalleryPicker({
-                    title: 'Pick Replacement from Sacred Gallery',
-                    onSelect: (url) => setReplaceNewUrl(url)
-                  })
-                }
-                className="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/20 text-white font-bold text-xs whitespace-nowrap cursor-pointer"
-              >
-                Pick from Gallery
-              </button>
-            </div>
-          </div>
-
-          {/* Step 4: Before & After Live Comparison Box */}
-          <div className="p-5 rounded-2xl bg-[#060a14] border border-amber-500/40 space-y-4">
-            <h5 className="font-cinzel text-xs font-bold text-amber-300 uppercase tracking-wider text-center">
-              Before & After Replacement Comparison
-            </h5>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
-              {/* Current Asset */}
-              <div className="p-3 rounded-xl bg-black/60 border border-white/10 text-center">
-                <span className="text-[10px] text-gray-400 uppercase font-bold block mb-1.5">
-                  Current Image ({replaceTargetType})
-                </span>
-                <div className="h-44 rounded-lg overflow-hidden border border-white/10 bg-black flex items-center justify-center">
-                  {getOldPreviewUrl() ? (
-                    <img src={getOldPreviewUrl()} alt="Current asset" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-gray-500 text-xs">Select an item above to view current image</span>
-                  )}
-                </div>
-              </div>
-
-              {/* New Replacement Asset */}
-              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-400/40 text-center">
-                <span className="text-[10px] text-amber-300 uppercase font-bold block mb-1.5">
-                  New Replacement Image
-                </span>
-                <div className="h-44 rounded-lg overflow-hidden border border-amber-500/40 bg-black flex items-center justify-center">
-                  {replaceNewUrl ? (
-                    <img src={replaceNewUrl} alt="Replacement asset" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-amber-400/60 text-xs">Upload new file or paste URL to preview</span>
-                  )}
-                </div>
+                <label className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/20 text-white font-bold text-xs cursor-pointer flex items-center gap-1">
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Upload</span>
+                  <input
+                    type="file"
+                    accept="image/*,video/*"
+                    className="hidden"
+                    onChange={(e) => handleLocalFileInput(e, (url) => setReplaceNewUrl(url))}
+                  />
+                </label>
               </div>
             </div>
 
             <button
               type="button"
-              disabled={!replaceNewUrl || (replaceTargetType !== 'murti' && !selectedReplaceId)}
               onClick={handleExecuteReplace}
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-extrabold text-xs uppercase tracking-wider shadow-lg hover:opacity-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black font-extrabold text-xs uppercase tracking-wider shadow-lg hover:brightness-110 transition-all cursor-pointer flex items-center justify-center gap-2"
             >
-              <RefreshCw className="w-4 h-4 stroke-[2.5]" />
-              <span>Confirm & Apply Replacement</span>
+              <RefreshCw className="w-4 h-4" />
+              <span>Execute Live Replacement</span>
             </button>
           </div>
 
+          <div className="lg:col-span-5 p-4 rounded-2xl bg-black/60 border border-amber-500/30 space-y-3">
+            <h5 className="font-bold text-amber-300 text-xs flex items-center gap-1.5 uppercase tracking-wider">
+              <RefreshCw className="w-4 h-4" />
+              <span>Before & After Preview</span>
+            </h5>
+            
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <span className="text-[10px] text-gray-400 block mb-1 font-bold">CURRENT ASSET</span>
+                <div className="aspect-square rounded-xl bg-black border border-white/10 overflow-hidden flex items-center justify-center">
+                  {getOldPreviewUrl() ? (
+                    <img src={getOldPreviewUrl()} alt="Old" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-[10px] text-gray-500">No selection</span>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[10px] text-amber-300 block mb-1 font-bold">NEW REPLACEMENT</span>
+                <div className="aspect-square rounded-xl bg-black border border-amber-400/40 overflow-hidden flex items-center justify-center">
+                  {replaceNewUrl ? (
+                    <img src={replaceNewUrl} alt="New" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-[10px] text-gray-500">Paste new URL</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
       {/* =========================================
-          SUB-TAB 3: DELETE MEDIA MANAGER
+          SUB-TAB 3: DELETE MEDIA
          ========================================= */}
       {activeSubTab === 'delete' && (
-        <div className="space-y-4 text-xs">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 rounded-xl bg-black/40 border border-white/10">
-            {/* Search */}
-            <div className="relative w-full sm:w-80">
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5 text-xs w-full sm:w-auto">
+              {(['all', 'gallery', 'product', 'video'] as const).map((filter) => (
+                <button
+                  type="button"
+                  key={filter}
+                  onClick={() => setDeleteFilter(filter)}
+                  className={`px-3 py-1.5 rounded-xl font-bold uppercase transition-all capitalize cursor-pointer ${
+                    deleteFilter === filter
+                      ? 'bg-red-600 text-white shadow'
+                      : 'bg-white/5 text-gray-400 hover:text-white border border-white/10'
+                  }`}
+                >
+                  {filter}
+                </button>
+              ))}
+            </div>
+
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
               <input
                 type="text"
                 value={deleteSearchQuery}
                 onChange={(e) => setDeleteSearchQuery(e.target.value)}
-                placeholder="Search media by title or name..."
-                className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-black border border-white/20 text-xs text-white"
+                placeholder="Search media to delete..."
+                className="w-full pl-9 pr-3 py-2 rounded-xl bg-black/60 border border-white/20 text-white text-xs"
               />
-              <Search className="w-3.5 h-3.5 text-amber-400 absolute left-2.5 top-2" />
-            </div>
-
-            {/* Filter buttons */}
-            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-black/60 border border-white/10 text-xs">
-              {(['all', 'gallery', 'product', 'video'] as const).map((filterId) => (
-                <button
-                  type="button"
-                  key={filterId}
-                  onClick={() => setDeleteFilter(filterId)}
-                  className={`px-2.5 py-1 rounded-lg font-bold capitalize transition-all ${
-                    deleteFilter === filterId
-                      ? 'bg-amber-400 text-black shadow-sm'
-                      : 'text-gray-400 hover:text-white'
-                  }`}
-                >
-                  {filterId}
-                </button>
-              ))}
             </div>
           </div>
 
-          {/* Media Items Table */}
-          <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
-            <span className="text-[11px] text-gray-400 block mb-1">
-              Found {combinedMediaForDelete.length} media items. Click Delete to remove from website:
-            </span>
-
-            {combinedMediaForDelete.length === 0 ? (
-              <div className="py-12 text-center text-gray-500">No media items found.</div>
-            ) : (
-              combinedMediaForDelete.slice(0, 50).map((item) => (
-                <div
-                  key={`${item.source}-${item.id}`}
-                  className="p-2.5 rounded-xl bg-white/[0.02] border border-white/10 hover:border-red-500/30 flex items-center justify-between gap-3 text-xs"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <img src={item.url} alt={item.title} className="w-12 h-12 rounded-lg object-cover border border-white/10 shrink-0" />
-                    <div className="min-w-0">
-                      <h6 className="font-bold text-white truncate max-w-sm">{item.title}</h6>
-                      <span className="text-[10px] text-amber-300 font-mono capitalize">
-                        {item.badge}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    {/* Quick Replace Trigger */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setReplaceTargetType(item.source as any);
-                        setSelectedReplaceId(item.id);
-                        setActiveSubTab('replace');
-                        showNotification(`Ready to replace "${item.title}"`);
-                      }}
-                      className="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-amber-300 border border-amber-400/30 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
-                    >
-                      <RefreshCw className="w-3 h-3" />
-                      <span>Replace</span>
-                    </button>
-
-                    {/* Delete Trigger */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (window.confirm(`Are you sure you want to permanently delete "${item.title}"?`)) {
-                          if (item.source === 'gallery') {
-                            deleteGalleryItem(item.id);
-                          } else if (item.source === 'product') {
-                            deleteProduct(item.id);
-                          } else if (item.source === 'video') {
-                            deleteVideoItem(item.id);
-                          }
-                        }
-                      }}
-                      className="px-2.5 py-1.5 rounded-lg bg-red-600/10 hover:bg-red-600/25 text-red-400 border border-red-500/30 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      <span>Delete</span>
-                    </button>
-                  </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[500px] overflow-y-auto pr-1">
+            {combinedMediaForDelete.map((item) => (
+              <div
+                key={`${item.source}-${item.id}`}
+                className="p-3 rounded-2xl bg-black/50 border border-white/10 flex items-center gap-3 group hover:border-red-500/50 transition-all"
+              >
+                <img src={item.url} alt="" className="w-14 h-14 rounded-xl object-cover shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="text-[10px] bg-white/10 text-gray-300 px-2 py-0.5 rounded font-mono block w-max mb-1">
+                    {item.badge}
+                  </span>
+                  <h6 className="font-bold text-white text-xs truncate">{item.title}</h6>
                 </div>
-              ))
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (item.source === 'gallery') {
+                      deleteGalleryItem(item.id);
+                      showNotification(`🗑️ Deleted gallery item: "${item.title}"`);
+                    } else if (item.source === 'product') {
+                      deleteProduct(item.id);
+                      showNotification(`🗑️ Deleted product: "${item.title}"`);
+                    } else if (item.source === 'video') {
+                      deleteVideoItem(item.id);
+                      showNotification(`🗑️ Deleted video: "${item.title}"`);
+                    }
+                  }}
+                  className="p-2.5 rounded-xl bg-red-500/20 text-red-400 hover:bg-red-600 hover:text-white transition-all cursor-pointer shrink-0"
+                  title="Delete Item"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+            {combinedMediaForDelete.length === 0 && (
+              <div className="col-span-full py-12 text-center text-gray-400 text-xs">
+                <AlertCircle className="w-8 h-8 mx-auto mb-2 opacity-40 text-red-400" />
+                No media items found matching your filters.
+              </div>
             )}
           </div>
         </div>
