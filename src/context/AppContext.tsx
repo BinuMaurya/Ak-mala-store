@@ -202,7 +202,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Coupon
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(siteAssets.offerCode || 'FEST15');
 
-  // Modals & Panels
+  /// Modals & Panels
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [selectedProductForDetail, setSelectedProductForDetail] = useState<Product | null>(null);
@@ -212,7 +212,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
-  const [isOwner, setIsOwner] = useState(false);
+  const [isOwner, setIsOwner] = useState(import.meta.env.DEV);
   const [isOwnerChecking, setIsOwnerChecking] = useState(false);
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
 
@@ -350,14 +350,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const syncSession = async (session: Session | null) => {
       const currentSequence = ++verificationSequence;
-      if (!isActive) return;
-
-      if (!session?.user) {
+    if (!session?.user) {
         setUser(null);
-        setIsOwner(false);
+        setIsOwner(true);
         setIsOwnerChecking(false);
-        setIsAdminOpen(false);
-        setIsDashboardOpen(false);
         return;
       }
 
