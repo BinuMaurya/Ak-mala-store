@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { supabase } from '../../services/supabase';
-import { ArrowRight, KeyRound, LockKeyhole, LogOut, Mail, X } from 'lucide-react';
+import { ArrowRight, KeyRound, LockKeyhole, LogOut, Mail, RotateCcw, X } from 'lucide-react';
 
 export const AuthOtpModal: React.FC = () => {
   const { isAuthOpen, setIsAuthOpen, user, setUser, showNotification } = useApp();
@@ -14,8 +14,8 @@ export const AuthOtpModal: React.FC = () => {
 
   if (!isAuthOpen) return null;
 
-  const sendCode = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const sendCode = async (event?: React.FormEvent) => {
+    if (event) event.preventDefault();
     if (!supabase) {
       setError('Secure sign-in is not configured yet. Please contact the store owner.');
       return;
@@ -26,6 +26,7 @@ export const AuthOtpModal: React.FC = () => {
       email: email.trim(),
       options: {
         shouldCreateUser: true,
+        emailRedirectTo: window.location.origin,
         data: name.trim() ? { full_name: name.trim() } : undefined
       }
     });
@@ -35,7 +36,7 @@ export const AuthOtpModal: React.FC = () => {
       return;
     }
     setWaitingForOtp(true);
-    showNotification('Check your email for a sign-in link or one-time code.');
+    showNotification('Check your email for a sign-in link or 6-digit code.');
   };
 
   const verifyCode = async (event: React.FormEvent) => {
@@ -138,19 +139,27 @@ export const AuthOtpModal: React.FC = () => {
             ) : (
               <form onSubmit={verifyCode} className="space-y-3">
                 <p className="text-center text-xs text-gray-400">
-                  If you received a code, enter it below. If you received a sign-in link, open it from this browser to finish signing in.
+                  Enter the 6-digit code from your email, or click the sign-in link in the same browser.
                 </p>
                 <input
                   inputMode="numeric"
                   required
                   value={otp}
                   onChange={(event) => setOtp(event.target.value)}
-                  placeholder="One-time code"
+                  placeholder="6-digit code"
                   autoComplete="one-time-code"
                   className="w-full rounded-xl border border-amber-400/50 bg-black/60 p-3 text-center font-mono text-base text-white"
                 />
                 <button disabled={isLoading} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3 text-xs font-extrabold uppercase text-white disabled:opacity-50">
                   {isLoading ? 'Verifying…' : 'Verify email'} <KeyRound className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  disabled={isLoading}
+                  onClick={() => void sendCode()}
+                  className="flex w-full items-center justify-center gap-1.5 pt-1 text-[11px] text-amber-300 hover:underline"
+                >
+                  <RotateCcw className="h-3 w-3" /> Resend code / Change email
                 </button>
               </form>
             )}
