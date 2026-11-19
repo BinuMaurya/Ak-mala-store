@@ -133,6 +133,7 @@ interface AppContextType {
   isAdminOpen: boolean;
   setIsAdminOpen: (open: boolean) => void;
   isOwner: boolean;
+  isOwnerChecking: boolean;
   isGalleryOpen: boolean;
   setIsGalleryOpen: (open: boolean) => void;
 
@@ -212,13 +213,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
+  const [isOwnerChecking, setIsOwnerChecking] = useState(false);
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
 
   // User & Orders
   const [user, setUser] = useState<{ name: string; phone: string; email?: string } | null>(() => {
     try {
       const saved = localStorage.getItem('ak_mala_user');
-      const storedUser = saved ? JSON.parse(saved) as { email?: string } : null;
+      const storedUser = saved ? (JSON.parse(saved) as { email?: string }) : null;
       if (storedUser?.email?.endsWith('@example.com')) {
         localStorage.removeItem('ak_mala_user');
         return null;
@@ -232,7 +234,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [orders, setOrders] = useState<Order[]>(() => {
     try {
       const saved = localStorage.getItem('ak_mala_orders');
-      const storedOrders = saved ? JSON.parse(saved) as Order[] : [];
+      const storedOrders = saved ? (JSON.parse(saved) as Order[]) : [];
       return storedOrders.filter((order) => order.id !== 'AKM-92841');
     } catch {
       return [];
@@ -242,12 +244,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeTrackingId, setActiveTrackingId] = useState<string>('');
   const [notification, setNotification] = useState<string | null>(null);
 
+  const showNotification = React.useCallback((msg: string) => {
+    setNotification(msg);
+    setTimeout(() => {
+      setNotification((curr) => (curr === msg ? null : curr));
+    }, 3800);
+  }, []);
+
   useEffect(() => {
     if (storeContentReady) return;
     let active = true;
     void fetch('/api/store/content')
       .then(async (response) => {
-        const result = await response.json() as { content?: StoreContent | null; error?: string };
+        const result = (await response.json()) as { content?: StoreContent | null; error?: string };
         if (!response.ok) throw new Error(result.error || 'Shared store content could not be loaded.');
         if (result.content) {
           const content = result.content;
@@ -276,8 +285,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       });
 
-    return () => { active = false; };
-  }, [storeContentReady, isOwner]);
+    return () => {
+      active = false;
+    };
+  }, [storeContentReady, isOwner, showNotification]);
 
   useEffect(() => {
     if (!storeContentReady || !isOwner) return;
@@ -300,7 +311,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             },
             body: JSON.stringify({ content })
           });
-          const result = await response.json() as { error?: string };
+          const result = (await response.json()) as { error?: string };
           if (!response.ok) throw new Error(result.error || 'Shared store changes could not be saved.');
           showNotification('Store changes are saved and live for all visitors.');
         })
@@ -310,7 +321,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
     }, 700);
     return () => window.clearTimeout(timeout);
-  }, [storeContentReady, isOwner, allProducts, siteAssets, galleryItems, videosList]);
+  }, [storeContentReady, isOwner, allProducts, siteAssets, galleryItems, videosList, showNotification]);
 
   useEffect(() => {
     localStorage.setItem('ak_mala_cart', JSON.stringify(cart));
@@ -336,56 +347,78 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!supabase) return;
     let isActive = true;
     let verificationSequence = 0;
+
     const syncSession = async (session: Session | null) => {
       const currentSequence = ++verificationSequence;
       if (!isActive) return;
-      setUser(session?.user ? {
-        name: session.user.user_metadata.full_name || session.user.email || 'AK MALA Customer',
-        phone: '',
-        email: session.user.email
-      } : null);
-      setIsOwner(false);
-      if (!session) {
+
+      if (!session?.user) {
+        setUser(null);
+        setIsOwner(false);
+        setIsOwnerChecking(false);
         setIsAdminOpen(false);
         setIsDashboardOpen(false);
         return;
       }
 
+      setUser({
+        name: session.user.user_metadata?.full_name || session.user.email || 'AK MALA Customer',
+        phone: '',
+        email: session.user.email
+      });
+      setIsOwner(false);
+      setIsOwnerChecking(true);
+
       try {
         const response = await fetch('/api/admin/access', {
           headers: { Authorization: `Bearer ${session.access_token}` }
         });
-        const accessResult = await response.json() as { authorized?: boolean; error?: string };
+        const accessResult = (await response.json().catch(() => ({}))) as {
+          authorized?: boolean;
+          error?: string;
+        };
         if (!isActive || currentSequence !== verificationSequence) return;
+
         const authorized = response.ok && accessResult.authorized === true;
         setIsOwner(authorized);
+        setIsOwnerChecking(false);
+
         if (!authorized) {
           setIsAdminOpen(false);
           setIsDashboardOpen(false);
-          if (response.status >= 500 || response.ok) {
+          if (!response.ok) {
             console.error('Owner access verification failed:', accessResult.error || response.status);
           }
         }
       } catch (error) {
         if (!isActive || currentSequence !== verificationSequence) return;
         setIsOwner(false);
+        setIsOwnerChecking(false);
         setIsAdminOpen(false);
         setIsDashboardOpen(false);
         console.error('Owner access verification could not reach the server:', error);
       }
     };
-    void supabase.auth.getSession().then(({ data, error }) => {
-      if (error) {
+
+    void supabase.auth
+      .getSession()
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('Could not restore the signed-in user:', error);
+          setIsOwnerChecking(false);
+          return;
+        }
+        void syncSession(data.session);
+      })
+      .catch((error: unknown) => {
         console.error('Could not restore the signed-in user:', error);
-        return;
-      }
-      void syncSession(data.session);
-    }).catch((error: unknown) => {
-      console.error('Could not restore the signed-in user:', error);
-    });
+        setIsOwnerChecking(false);
+      });
+
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       void syncSession(session);
     });
+
     return () => {
       isActive = false;
       authListener.subscription.unsubscribe();
@@ -405,13 +438,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       trackEvent('product_view', selectedProductForDetail.id);
     }
   }, [selectedProductForDetail]);
-
-  const showNotification = (msg: string) => {
-    setNotification(msg);
-    setTimeout(() => {
-      setNotification((curr) => (curr === msg ? null : curr));
-    }, 3800);
-  };
 
   const toggleTheme = () => {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
@@ -508,7 +534,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Cart operations
-  const addToCart = (product: Product, size: '16"' | '22"' | '28"' | '36"' = '22"', customNotes?: string) => {
+  const addToCart = (
+    product: Product,
+    size: '16"' | '22"' | '28"' | '36"' = '22"',
+    customNotes?: string
+  ) => {
     const sizeConfig = product.availableSizes.find((s) => s.size === size);
     const unitPrice = product.price + (sizeConfig ? sizeConfig.extraPrice : 0);
     const cartItemId = `${product.id}-${size}`;
@@ -519,20 +549,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return prev.map((item) =>
           item.id === cartItemId ? { ...item, quantity: item.quantity + 1 } : item
         );
-      } else {
-        return [
-          ...prev,
-          {
-            id: cartItemId,
-            productId: product.id,
-            product,
-            selectedSize: size,
-            quantity: 1,
-            pricePerUnit: unitPrice,
-            customNotes
-          }
-        ];
       }
+      return [
+        ...prev,
+        {
+          id: cartItemId,
+          productId: product.id,
+          product,
+          selectedSize: size,
+          quantity: 1,
+          pricePerUnit: unitPrice,
+          customNotes
+        }
+      ];
     });
 
     showNotification(`Added "${product.name}" (${size}) to your sacred basket!`);
@@ -622,11 +651,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         trackEvent('wishlist_remove', productId);
         showNotification('Removed from sacred wishlist');
         return prev.filter((id) => id !== productId);
-      } else {
-        trackEvent('wishlist_add', productId);
-        showNotification('Added to sacred wishlist');
-        return [...prev, productId];
       }
+      trackEvent('wishlist_add', productId);
+      showNotification('Added to sacred wishlist');
+      return [...prev, productId];
     });
   };
 
@@ -714,6 +742,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isAdminOpen,
         setIsAdminOpen,
         isOwner,
+        isOwnerChecking,
         isGalleryOpen,
         setIsGalleryOpen,
         user,

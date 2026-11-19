@@ -53,7 +53,7 @@ function escapeCsv(value: string): string {
 }
 
 export const AdminDashboardModal: React.FC = () => {
-  const { isDashboardOpen, isOwner, setIsDashboardOpen, showNotification, allProducts } = useApp();
+  const { isDashboardOpen, isOwner, isOwnerChecking, setIsDashboardOpen, showNotification, allProducts } = useApp();
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
   const [waitingForOtp, setWaitingForOtp] = useState(false);
@@ -76,17 +76,21 @@ export const AdminDashboardModal: React.FC = () => {
 
   useEffect(() => {
     if (!supabase) return;
+    let active = true;
     void supabase.auth.getSession().then(({ data: sessionData }) => {
-      setAccessToken(sessionData.session?.access_token || null);
+      if (active) setAccessToken(sessionData.session?.access_token || null);
     });
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setAccessToken(session?.access_token || null);
+      if (active) setAccessToken(session?.access_token || null);
     });
-    return () => authListener.subscription.unsubscribe();
+    return () => {
+      active = false;
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
-    if (!isDashboardOpen || !accessToken) return;
+    if (!isDashboardOpen || !isOwner || !accessToken) return;
     let cancelled = false;
     setLoading(true);
     setError('');
@@ -94,7 +98,7 @@ export const AdminDashboardModal: React.FC = () => {
       headers: { Authorization: `Bearer ${accessToken}` }
     })
       .then(async (response) => {
-        const result = await response.json() as DashboardData & { error?: string };
+        const result = (await response.json()) as DashboardData & { error?: string };
         if (!response.ok) throw new Error(result.error || 'Owner data could not be loaded.');
         if (!cancelled) setData(result);
       })
@@ -107,8 +111,10 @@ export const AdminDashboardModal: React.FC = () => {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    return () => { cancelled = true; };
-  }, [isDashboardOpen, accessToken]);
+    return () => {
+      cancelled = true;
+    };
+  }, [isDashboardOpen, isOwner, accessToken]);
 
   const metrics = useMemo(() => {
     const events = data?.events || [];
@@ -130,7 +136,8 @@ export const AdminDashboardModal: React.FC = () => {
       pageViews: events.filter((event) => event.event_type === 'page_view').length,
       productViews: events.filter((event) => event.event_type === 'product_view').length,
       wishlistAdds: events.filter((event) => event.event_type === 'wishlist_add').length,
-      galleryLikes: events.filter((event) => event.event_type === 'gallery_like').length -
+      galleryLikes:
+        events.filter((event) => event.event_type === 'gallery_like').length -
         events.filter((event) => event.event_type === 'gallery_unlike').length,
       paidOrders: paidOrders.length,
       revenue: paidOrders.reduce((total, order) => total + order.total, 0),
@@ -140,19 +147,22 @@ export const AdminDashboardModal: React.FC = () => {
     };
   }, [data, allProducts]);
 
-  if (!isDashboardOpen || !isOwner) return null;
+  if (!isDashboardOpen) return null;
 
   const sendOwnerCode = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!supabase) {
-      setError('Owner sign-in is not configured. Add SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY to the build environment, or set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY overrides.');
+      setError('Owner sign-in is not configured. Check Supabase environment variables.');
       return;
     }
     setLoading(true);
     setError('');
     const { error: signInError } = await supabase.auth.signInWithOtp({
       email: email.trim(),
-      options: { shouldCreateUser: false }
+      options: {
+        emailRedirectTo: window.location.origin,
+        shouldCreateUser: true
+      }
     });
     setLoading(false);
     if (signInError) {
@@ -160,7 +170,7 @@ export const AdminDashboardModal: React.FC = () => {
       return;
     }
     setWaitingForOtp(true);
-    showNotification('A one-time owner sign-in code was sent to your email.');
+    showNotification('A one-time owner sign-in code / link was sent to your email.');
   };
 
   const verifyOwnerCode = async (event: React.FormEvent) => {
@@ -190,12 +200,14 @@ export const AdminDashboardModal: React.FC = () => {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({ orderStatus })
       });
-      const result = await response.json() as { order?: DashboardOrder; message?: string; error?: string };
+      const result = (await response.json()) as { order?: DashboardOrder; message?: string; error?: string };
       if (!response.ok || !result.order) throw new Error(result.error || 'Order status could not be updated.');
-      setData((current) => current && ({
-        ...current,
-        orders: current.orders.map((item) => item.id === order.id ? result.order! : item)
-      }));
+      setData((current) =>
+        current && {
+          ...current,
+          orders: current.orders.map((item) => (item.id === order.id ? result.order! : item))
+        }
+      );
       if (result.message) showNotification(result.message);
     } catch (statusError) {
       showNotification(statusError instanceof Error ? statusError.message : 'Order status could not be updated.');
@@ -213,12 +225,14 @@ export const AdminDashboardModal: React.FC = () => {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({ code: deliveryCodes[order.id] || '' })
       });
-      const result = await response.json() as { order?: DashboardOrder; message?: string; error?: string };
+      const result = (await response.json()) as { order?: DashboardOrder; message?: string; error?: string };
       if (!response.ok || !result.order) throw new Error(result.error || 'Delivery could not be confirmed.');
-      setData((current) => current && ({
-        ...current,
-        orders: current.orders.map((item) => item.id === order.id ? result.order! : item)
-      }));
+      setData((current) =>
+        current && {
+          ...current,
+          orders: current.orders.map((item) => (item.id === order.id ? result.order! : item))
+        }
+      );
       setDeliveryCodes((current) => ({ ...current, [order.id]: '' }));
       showNotification(result.message || 'Delivery confirmed.');
     } catch (deliveryError) {
@@ -275,7 +289,9 @@ export const AdminDashboardModal: React.FC = () => {
           </div>
         </header>
 
-        {!accessToken ? (
+        {isOwnerChecking ? (
+          <div className="p-10 text-center text-sm text-amber-200">Verifying owner permission…</div>
+        ) : !accessToken ? (
           <div className="m-auto w-full max-w-sm space-y-4 p-6">
             <LockKeyhole className="mx-auto h-9 w-9 text-amber-300" />
             <p className="text-center text-xs text-gray-300">
@@ -313,6 +329,14 @@ export const AdminDashboardModal: React.FC = () => {
             )}
             {error && <p role="alert" className="text-center text-xs text-red-300">{error}</p>}
           </div>
+        ) : !isOwner ? (
+          <div className="m-auto max-w-md space-y-3 p-8 text-center">
+            <LockKeyhole className="mx-auto h-9 w-9 text-red-300" />
+            <p className="text-sm font-semibold text-white">Owner access not authorized for this account</p>
+            <p className="text-xs text-gray-400">
+              Check that your signed-in email is listed in <code>ADMIN_EMAILS</code> on the backend server.
+            </p>
+          </div>
         ) : loading ? (
           <div className="p-10 text-center text-sm text-amber-200">Loading owner data…</div>
         ) : error ? (
@@ -342,12 +366,28 @@ export const AdminDashboardModal: React.FC = () => {
               <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-amber-300">Product activity (consenting visitors)</h4>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="text-gray-400"><tr><th className="py-2">Product</th><th>Views</th><th>Wishlist adds (net)</th></tr></thead>
+                  <thead className="text-gray-400">
+                    <tr>
+                      <th className="py-2">Product</th>
+                      <th>Views</th>
+                      <th>Wishlist adds (net)</th>
+                    </tr>
+                  </thead>
                   <tbody className="divide-y divide-white/5">
                     {metrics.productActivity.map((product) => (
-                      <tr key={product.id}><td className="py-2 text-gray-200">{product.name}</td><td>{product.views}</td><td>{Math.max(0, product.netWishlist)}</td></tr>
+                      <tr key={product.id}>
+                        <td className="py-2 text-gray-200">{product.name}</td>
+                        <td>{product.views}</td>
+                        <td>{Math.max(0, product.netWishlist)}</td>
+                      </tr>
                     ))}
-                    {metrics.productActivity.length === 0 && <tr><td colSpan={3} className="py-4 text-gray-500">No consented product activity recorded yet.</td></tr>}
+                    {metrics.productActivity.length === 0 && (
+                      <tr>
+                        <td colSpan={3} className="py-4 text-gray-500">
+                          No consented product activity recorded yet.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -365,16 +405,23 @@ export const AdminDashboardModal: React.FC = () => {
                   <article key={order.id} className="rounded-xl border border-white/10 bg-black/30 p-3 text-xs">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <p className="font-bold text-white">{order.order_number} · {order.customer_name}</p>
-                        <p className="mt-1 text-gray-300">{order.phone}{order.email ? ` · ${order.email}` : ''}</p>
+                        <p className="font-bold text-white">
+                          {order.order_number} · {order.customer_name}
+                        </p>
+                        <p className="mt-1 text-gray-300">
+                          {order.phone}
+                          {order.email ? ` · ${order.email}` : ''}
+                        </p>
                         <p className="mt-1 text-gray-400">
-                          {order.shipping_address.line1}, {order.shipping_address.city}, {order.shipping_address.state} - {order.shipping_address.pincode}
+                          {order.shipping_address.line1}, {order.shipping_address.city}, {order.shipping_address.state} -{' '}
+                          {order.shipping_address.pincode}
                         </p>
                         <p className="mt-2 text-gray-300">
                           {order.items.map((item) => `${item.productName} (${item.selectedSize}) × ${item.quantity}`).join(' · ')}
                         </p>
                         <p className="mt-1 font-bold text-amber-200">
-                          ₹{order.total.toLocaleString('en-IN')} · {order.payment_method.toUpperCase()} / {order.payment_status.toUpperCase()}
+                          ₹{order.total.toLocaleString('en-IN')} · {order.payment_method.toUpperCase()} /{' '}
+                          {order.payment_status.toUpperCase()}
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-2">
@@ -388,15 +435,24 @@ export const AdminDashboardModal: React.FC = () => {
                           >
                             {orderStatuses
                               .filter((status) => status !== 'delivered' || order.order_status === 'delivered')
-                              .map((status) => <option key={status} value={status}>{status.replaceAll('_', ' ')}</option>)}
+                              .map((status) => (
+                                <option key={status} value={status}>
+                                  {status.replaceAll('_', ' ')}
+                                </option>
+                              ))}
                           </select>
-                          <button onClick={() => setPrintingOrder(order)} className="flex items-center gap-1 rounded-lg bg-amber-400 px-2.5 py-2 font-bold text-black">
+                          <button
+                            onClick={() => setPrintingOrder(order)}
+                            className="flex items-center gap-1 rounded-lg bg-amber-400 px-2.5 py-2 font-bold text-black"
+                          >
                             <Printer className="h-3.5 w-3.5" /> Slip
                           </button>
                         </div>
                         {order.order_status === 'out_for_delivery' && (
                           <div className="w-full max-w-xs space-y-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-2">
-                            <p className="text-[10px] text-amber-200">Enter the 6-digit delivery OTP shared by the customer/courier.</p>
+                            <p className="text-[10px] text-amber-200">
+                              Enter the 6-digit delivery OTP shared by the customer/courier.
+                            </p>
                             <div className="flex gap-2">
                               <input
                                 inputMode="numeric"
@@ -404,10 +460,12 @@ export const AdminDashboardModal: React.FC = () => {
                                 maxLength={6}
                                 aria-label={`Delivery OTP for ${order.order_number}`}
                                 value={deliveryCodes[order.id] || ''}
-                                onChange={(event) => setDeliveryCodes((current) => ({
-                                  ...current,
-                                  [order.id]: event.target.value.replace(/\D/g, '').slice(0, 6)
-                                }))}
+                                onChange={(event) =>
+                                  setDeliveryCodes((current) => ({
+                                    ...current,
+                                    [order.id]: event.target.value.replace(/\D/g, '').slice(0, 6)
+                                  }))
+                                }
                                 className="min-w-0 flex-1 rounded-md border border-white/15 bg-[#101827] px-2 py-1.5 text-xs tracking-[0.3em] text-white"
                                 placeholder="6-digit OTP"
                               />
@@ -437,17 +495,24 @@ export const AdminDashboardModal: React.FC = () => {
             </section>
 
             <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-              <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-amber-300">Recent consented visitor activity</h4>
+              <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-amber-300">
+                Recent consented visitor activity
+              </h4>
               <div className="space-y-2">
                 {(data?.events || []).slice(0, 30).map((event) => (
                   <div key={event.id} className="flex flex-wrap justify-between gap-2 border-b border-white/5 py-2 text-xs">
                     <span className="text-gray-200">
-                      {event.event_type.replaceAll('_', ' ')}{event.product_id ? ` · ${event.product_id}` : ` · ${event.page_path}`}
+                      {event.event_type.replaceAll('_', ' ')}
+                      {event.product_id ? ` · ${event.product_id}` : ` · ${event.page_path}`}
                     </span>
-                    <span className="font-mono text-gray-500">{event.visitor_id.slice(0, 8)}… · {new Date(event.created_at).toLocaleString()}</span>
+                    <span className="font-mono text-gray-500">
+                      {event.visitor_id.slice(0, 8)}… · {new Date(event.created_at).toLocaleString()}
+                    </span>
                   </div>
                 ))}
-                {!data?.events.length && <p className="text-xs text-gray-500">No visitors have accepted analytics consent yet.</p>}
+                {!data?.events.length && (
+                  <p className="text-xs text-gray-500">No visitors have accepted analytics consent yet.</p>
+                )}
               </div>
             </section>
           </div>
@@ -456,18 +521,30 @@ export const AdminDashboardModal: React.FC = () => {
         {printingOrder && (
           <div id="shipping-slip" className="hidden bg-white p-8 text-black">
             <h1 className="text-2xl font-bold">AK MALA · SHIPPING SLIP</h1>
-            <p className="mt-4"><strong>Order:</strong> {printingOrder.order_number}</p>
-            <p><strong>Date:</strong> {new Date(printingOrder.created_at).toLocaleDateString()}</p>
+            <p className="mt-4">
+              <strong>Order:</strong> {printingOrder.order_number}
+            </p>
+            <p>
+              <strong>Date:</strong> {new Date(printingOrder.created_at).toLocaleDateString()}
+            </p>
             <h2 className="mt-6 font-bold">SHIP TO</h2>
             <p className="text-lg font-semibold">{printingOrder.customer_name}</p>
             <p>{printingOrder.shipping_address.line1}</p>
-            <p>{printingOrder.shipping_address.city}, {printingOrder.shipping_address.state} - {printingOrder.shipping_address.pincode}</p>
+            <p>
+              {printingOrder.shipping_address.city}, {printingOrder.shipping_address.state} -{' '}
+              {printingOrder.shipping_address.pincode}
+            </p>
             <p>Phone: {printingOrder.phone}</p>
             <h2 className="mt-6 font-bold">ITEMS</h2>
             {printingOrder.items.map((item, index) => (
-              <p key={`${item.productId}-${index}`}>{item.productName} · {item.selectedSize} · Qty {item.quantity}</p>
+              <p key={`${item.productId}-${index}`}>
+                {item.productName} · {item.selectedSize} · Qty {item.quantity}
+              </p>
             ))}
-            <p className="mt-4 font-bold">Total: ₹{printingOrder.total.toLocaleString('en-IN')} · {printingOrder.payment_method.toUpperCase()} ({printingOrder.payment_status})</p>
+            <p className="mt-4 font-bold">
+              Total: ₹{printingOrder.total.toLocaleString('en-IN')} · {printingOrder.payment_method.toUpperCase()} (
+              {printingOrder.payment_status})
+            </p>
           </div>
         )}
       </div>
