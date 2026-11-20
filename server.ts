@@ -784,7 +784,26 @@ app.patch('/api/admin/orders/:id/status', async (request: Request, response: Res
       response.json({ order: withoutDeliveryOtp(order), message: 'Delivery OTP sent.' });
       return;
     }
-
+app.patch('/api/admin/orders/:id/verify-utr', async (request: Request, response: Response) => {
+  try {
+    await requireAdmin(request);
+    const orderId = request.params.id;
+    const orders = await supabaseRequest<StoredOrder[]>(
+      `orders?id=eq.${encodeURIComponent(orderId)}&select=*`,
+      'PATCH',
+      { payment_status: 'paid' },
+      'return=representation'
+    );
+    if (!orders.length) {
+      response.status(404).json({ error: 'Order not found.' });
+      return;
+    }
+    response.json({ order: withoutDeliveryOtp(orders[0]), message: 'UTR payment marked as paid.' });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unable to verify UTR.';
+    response.status(400).json({ error: msg });
+  }
+});
     const orders = await supabaseRequest<StoredOrder[]>(
       `orders?id=eq.${encodeURIComponent(orderId)}&select=*`,
       'PATCH',

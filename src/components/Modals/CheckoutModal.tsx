@@ -29,9 +29,11 @@ export const CheckoutModal: React.FC = () => {
     setIsTrackerOpen,
     showNotification
   } = useApp();
-  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(2); // Default on Payment as in screenshot
+
+  const [step, setStep] = useState<'address' | 'payment'>('address');
   const [paymentMethod, setPaymentMethod] = useState<'upi_qr' | 'upi' | 'card' | 'netbanking' | 'wallets' | 'cod'>('upi_qr');
   const [utrNumber, setUtrNumber] = useState('');
+  const [amountConfirmed, setAmountConfirmed] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [address, setAddress] = useState({
     name: '',
@@ -42,7 +44,6 @@ export const CheckoutModal: React.FC = () => {
     state: '',
     pincode: ''
   });
-  const [editingAddress, setEditingAddress] = useState(true);
 
   if (!isCheckoutOpen) return null;
 
@@ -53,33 +54,47 @@ export const CheckoutModal: React.FC = () => {
       address.line1.trim() &&
       address.city.trim() &&
       address.state.trim() &&
-      /^\d{6}$/.test(address.pincode) &&
-      /^\+?\d[\d\s()-]{8,}\d$/.test(address.phone)
+      /^\d{6}$/.test(address.pincode.trim()) &&
+      /^\+?\d[\d\s()-]{8,}\d$/.test(address.phone.trim())
     );
+
+  const handleContinueToPayment = () => {
+    if (!isValidAddress()) {
+      showNotification('Pehle Name, valid Phone, Address, City, State aur 6-digit Pincode bharo.');
+      return;
+    }
+    setStep('payment');
+  };
 
   const handlePay = async () => {
     if (!isValidAddress()) {
-      setEditingAddress(true);
-      showNotification('Please enter your name, valid phone, and complete delivery address.');
+      setStep('address');
+      showNotification('Delivery address adhoora hai. Pehle address complete karo.');
       return;
     }
 
-    if (paymentMethod === 'upi_qr' && !/^[a-zA-Z0-9]{10,22}$/.test(utrNumber.trim())) {
-      showNotification('Please enter a valid 10–22 character UPI UTR / Transaction ID.');
-      return;
+    if (paymentMethod === 'upi_qr') {
+      if (!/^[a-zA-Z0-9]{10,22}$/.test(utrNumber.trim())) {
+        showNotification('Sahi 10 se 22 digit ka UTR / Transaction ID daalo.');
+        return;
+      }
+      if (!amountConfirmed) {
+        showNotification(`Confirm karo ki aapne poora ₹${finalTotal} pay kiya hai.`);
+        return;
+      }
     }
 
     setIsProcessing(true);
     try {
       const customer = {
-        name: address.name,
-        phone: address.phone,
-        email: address.email.trim(),
+        name: address.name.trim(),
+        phone: address.phone.trim(),
+        email: address.email.trim() || null,
         address: {
-          line1: address.line1,
-          city: address.city,
-          state: address.state,
-          pincode: address.pincode
+          line1: address.line1.trim(),
+          city: address.city.trim(),
+          state: address.state.trim(),
+          pincode: address.pincode.trim()
         }
       };
       const visitorId = getConsentedVisitorId();
@@ -101,7 +116,8 @@ export const CheckoutModal: React.FC = () => {
             couponCode: appliedCoupon,
             customer,
             visitorId,
-            utrNumber: utrNumber.trim()
+            utrNumber: utrNumber.trim(),
+            declaredAmount: finalTotal
           })
         });
         const result = await response.json() as {
@@ -109,7 +125,7 @@ export const CheckoutModal: React.FC = () => {
           error?: string;
         };
         if (!response.ok || !result.order) {
-          throw new Error(result.error || 'Unable to save your UPI order. Please try again.');
+          throw new Error(result.error || 'Order save nahi ho paya. Dobara try karo.');
         }
         orderNumber = result.order.order_number;
         quote = {
@@ -174,9 +190,9 @@ export const CheckoutModal: React.FC = () => {
       });
 
       const newOrder = placeOrder({
-        customerName: address.name,
-        phone: address.phone,
-        email: address.email.trim(),
+        customerName: customer.name,
+        phone: customer.phone,
+        email: customer.email || '',
         address: customer.address,
         items: cart,
         ...quote,
@@ -187,17 +203,18 @@ export const CheckoutModal: React.FC = () => {
       }, orderNumber);
 
       setUtrNumber('');
+      setAmountConfirmed(false);
       setIsCheckoutOpen(false);
       setIsTrackerOpen(true);
       showNotification(
         paymentMethod === 'upi_qr'
-          ? `UPI order ${newOrder.id} submitted for UTR verification.`
+          ? `Order ${newOrder.id} (₹${quote.total}) UTR ke saath submit ho gaya. Admin dashboard mein check karein.`
           : paymentMethod === 'cod'
             ? `Cash on delivery order ${newOrder.id} placed.`
             : `Payment verified. Order ${newOrder.id} placed successfully!`
       );
     } catch (error) {
-      showNotification(error instanceof Error ? error.message : 'Payment failed. Please try again.');
+      showNotification(error instanceof Error ? error.message : 'Order submit nahi ho paya.');
     } finally {
       setIsProcessing(false);
     }
@@ -209,30 +226,49 @@ export const CheckoutModal: React.FC = () => {
 
         {/* Header Bar */}
         <div className="p-4 border-b border-white/10 flex items-center justify-between bg-[#060a14]">
-          <h3 className="font-cinzel text-base font-bold text-white">Checkout</h3>
+          <div>
+            <h3 className="font-cinzel text-base font-bold text-white">Checkout</h3>
+            <p className="text-[11px] text-amber-200/80">Order Total: ₹{finalTotal}</p>
+          </div>
           <button
             onClick={() => setIsCheckoutOpen(false)}
-            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white"
+            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Step Indicator: 1 Address -> 2 Payment -> 3 Confirm */}
+        {/* Step Indicator */}
         <div className="bg-black/40 px-6 py-3 border-b border-white/5 flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2">
-            <span className="w-5 h-5 rounded-full bg-emerald-500 text-black font-bold text-[10px] flex items-center justify-center">
-              ✓
+          <button
+            type="button"
+            onClick={() => setStep('address')}
+            className="flex items-center gap-2 cursor-pointer"
+          >
+            <span className={`w-5 h-5 rounded-full font-bold text-[10px] flex items-center justify-center ${
+              isValidAddress() ? 'bg-emerald-500 text-black' : 'bg-[#E5C158] text-black'
+            }`}>
+              {isValidAddress() ? '✓' : '1'}
             </span>
-            <span className="text-gray-300 font-medium">1 Address</span>
-          </div>
+            <span className={step === 'address' ? 'text-amber-200 font-bold' : 'text-gray-300 font-medium'}>
+              1 Address
+            </span>
+          </button>
           <div className="w-10 h-[1px] bg-amber-500/40" />
-          <div className="flex items-center gap-2">
-            <span className="w-5 h-5 rounded-full bg-[#E5C158] text-black font-bold text-[10px] flex items-center justify-center">
+          <button
+            type="button"
+            onClick={handleContinueToPayment}
+            className="flex items-center gap-2 cursor-pointer"
+          >
+            <span className={`w-5 h-5 rounded-full font-bold text-[10px] flex items-center justify-center ${
+              step === 'payment' ? 'bg-[#E5C158] text-black' : 'bg-white/10 text-gray-400'
+            }`}>
               2
             </span>
-            <span className="text-amber-200 font-bold">2 Payment</span>
-          </div>
+            <span className={step === 'payment' ? 'text-amber-200 font-bold' : 'text-gray-500'}>
+              2 Payment
+            </span>
+          </button>
           <div className="w-10 h-[1px] bg-white/20" />
           <div className="flex items-center gap-2">
             <span className="w-5 h-5 rounded-full bg-white/10 text-gray-400 font-bold text-[10px] flex items-center justify-center">
@@ -245,298 +281,313 @@ export const CheckoutModal: React.FC = () => {
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5">
 
-          {/* DELIVERY ADDRESS CARD */}
-          <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-gray-300">
-                  DELIVERY ADDRESS
+          {step === 'address' ? (
+            <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-200">
+                  DELIVERY ADDRESS (COMPULSORY)
                 </span>
-                <span className="text-[10px] font-bold bg-amber-500/20 text-amber-300 px-2 py-0.2 rounded border border-amber-500/30">
-                  Home
-                </span>
+                <span className="text-[11px] text-gray-400">Total: ₹{finalTotal}</span>
               </div>
-              <button
-                onClick={() => setEditingAddress(!editingAddress)}
-                className="text-xs text-[#E5C158] hover:underline cursor-pointer"
-              >
-                {editingAddress ? 'Save' : 'Change'}
-              </button>
+
+              <input
+                type="text"
+                value={address.name}
+                onChange={(e) => setAddress({ ...address, name: e.target.value })}
+                placeholder="Full Name *"
+                className="w-full p-2.5 rounded-lg bg-black/50 border border-white/20 text-xs text-white"
+              />
+              <input
+                type="tel"
+                value={address.phone}
+                onChange={(e) => setAddress({ ...address, phone: e.target.value })}
+                placeholder="Phone Number (10 digits) *"
+                className="w-full p-2.5 rounded-lg bg-black/50 border border-white/20 text-xs text-white"
+              />
+              <input
+                type="email"
+                value={address.email}
+                onChange={(e) => setAddress({ ...address, email: e.target.value })}
+                placeholder="Email (optional)"
+                autoComplete="email"
+                className="w-full p-2.5 rounded-lg bg-black/50 border border-white/20 text-xs text-white"
+              />
+              <input
+                type="text"
+                value={address.line1}
+                onChange={(e) => setAddress({ ...address, line1: e.target.value })}
+                placeholder="House No., Street, Area / Landmark *"
+                className="w-full p-2.5 rounded-lg bg-black/50 border border-white/20 text-xs text-white"
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <input
+                  type="text"
+                  value={address.city}
+                  onChange={(e) => setAddress({ ...address, city: e.target.value })}
+                  placeholder="City *"
+                  className="p-2.5 rounded-lg bg-black/50 border border-white/20 text-xs text-white"
+                />
+                <input
+                  type="text"
+                  value={address.state}
+                  onChange={(e) => setAddress({ ...address, state: e.target.value })}
+                  placeholder="State *"
+                  className="p-2.5 rounded-lg bg-black/50 border border-white/20 text-xs text-white"
+                />
+                <input
+                  type="text"
+                  value={address.pincode}
+                  onChange={(e) => setAddress({ ...address, pincode: e.target.value })}
+                  placeholder="6-Digit Pincode *"
+                  maxLength={6}
+                  className="p-2.5 rounded-lg bg-black/50 border border-white/20 text-xs text-white"
+                />
+              </div>
             </div>
-
-            {editingAddress ? (
-              <div className="space-y-2 pt-2">
-                <input
-                  type="text"
-                  value={address.name}
-                  onChange={(e) => setAddress({ ...address, name: e.target.value })}
-                  placeholder="Full Name"
-                  className="w-full p-2 rounded-lg bg-black/50 border border-white/20 text-xs text-white"
-                />
-                <input
-                  type="tel"
-                  value={address.phone}
-                  onChange={(e) => setAddress({ ...address, phone: e.target.value })}
-                  placeholder="Phone Number"
-                  className="w-full p-2 rounded-lg bg-black/50 border border-white/20 text-xs text-white"
-                />
-                <input
-                  type="email"
-                  value={address.email}
-                  onChange={(e) => setAddress({ ...address, email: e.target.value })}
-                  placeholder="Email (optional)"
-                  autoComplete="email"
-                  className="w-full p-2 rounded-lg bg-black/50 border border-white/20 text-xs text-white"
-                />
-                <input
-                  type="text"
-                  value={address.line1}
-                  onChange={(e) => setAddress({ ...address, line1: e.target.value })}
-                  placeholder="Address Line"
-                  className="w-full p-2 rounded-lg bg-black/50 border border-white/20 text-xs text-white"
-                />
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    type="text"
-                    value={address.city}
-                    onChange={(e) => setAddress({ ...address, city: e.target.value })}
-                    placeholder="City"
-                    className="p-2 rounded-lg bg-black/50 border border-white/20 text-xs text-white"
-                  />
-                  <input
-                    type="text"
-                    value={address.state}
-                    onChange={(e) => setAddress({ ...address, state: e.target.value })}
-                    placeholder="State"
-                    className="p-2 rounded-lg bg-black/50 border border-white/20 text-xs text-white"
-                  />
-                  <input
-                    type="text"
-                    value={address.pincode}
-                    onChange={(e) => setAddress({ ...address, pincode: e.target.value })}
-                    placeholder="Pincode"
-                    className="p-2 rounded-lg bg-black/50 border border-white/20 text-xs text-white"
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="text-xs text-gray-300 space-y-0.5">
-                <p className="font-bold text-white">{address.name}</p>
-                <p className="text-gray-400">{address.line1}, {address.city}, {address.state} - {address.pincode}</p>
-                <p className="text-amber-200/80 font-mono text-[11px]">{address.phone}</p>
-              </div>
-            )}
-          </div>
-
-          {/* PAYMENT METHODS ACCORDION / RADIO LIST */}
-          <div className="space-y-2.5">
-            <span className="text-xs font-bold uppercase tracking-wider text-gray-300 block">
-              PAYMENT METHODS
-            </span>
-
-            {/* Direct UPI QR + UTR Option */}
-            <div className="space-y-2">
-              <label
-                onClick={() => setPaymentMethod('upi_qr')}
-                className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-                  paymentMethod === 'upi_qr'
-                    ? 'bg-amber-500/15 border-amber-400 shadow-sm ring-1 ring-amber-400/50'
-                    : 'bg-white/[0.02] border-white/10 hover:border-amber-500/30'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-[#E5C158] flex items-center justify-center">
-                    <QrCode className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-white">Scan UPI QR & Enter UTR (0% Gateway Fee)</h4>
-                    <p className="text-[10px] text-gray-400">Pay ₹{finalTotal} via QR & submit UTR reference</p>
-                  </div>
-                </div>
-                <input
-                  type="radio"
-                  name="payOption"
-                  checked={paymentMethod === 'upi_qr'}
-                  onChange={() => setPaymentMethod('upi_qr')}
-                  className="w-4 h-4 text-amber-500 accent-amber-500"
-                />
-              </label>
-
-              {paymentMethod === 'upi_qr' && (
-                <div className="p-4 rounded-2xl bg-black/50 border border-[#D4AF37]/35 space-y-3 text-center">
-                  <p className="text-xs font-semibold text-amber-200">
-                    Scan QR & Pay ₹{finalTotal}
+          ) : (
+            <>
+              {/* Selected Address Summary */}
+              <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 flex items-start justify-between gap-3">
+                <div className="text-xs text-gray-300 space-y-0.5">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                    DELIVERING TO
                   </p>
-                  <img
-                    src="/upi-qr.jpg"
-                    alt="UPI Payment QR Code"
-                    className="w-44 h-44 mx-auto rounded-xl bg-white p-2 object-contain border border-amber-400/40"
-                  />
-                  <p className="text-[11px] text-gray-300">
-                    UPI ID: <span className="font-mono text-amber-200 select-all">binumaurya623@okaxis</span>
+                  <p className="font-bold text-white">{address.name} ({address.phone})</p>
+                  <p className="text-gray-400">
+                    {address.line1}, {address.city}, {address.state} - {address.pincode}
                   </p>
-                  <div className="text-left space-y-1">
-                    <label className="text-[11px] text-amber-200 font-medium block">
-                      Enter UTR / Transaction ID *
-                    </label>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setStep('address')}
+                  className="text-xs text-[#E5C158] hover:underline shrink-0 cursor-pointer"
+                >
+                  Edit
+                </button>
+              </div>
+
+              {/* PAYMENT METHODS */}
+              <div className="space-y-2.5">
+                <span className="text-xs font-bold uppercase tracking-wider text-gray-300 block">
+                  PAYMENT METHODS
+                </span>
+
+                {/* Direct UPI QR + UTR Option */}
+                <div className="space-y-2">
+                  <label
+                    onClick={() => setPaymentMethod('upi_qr')}
+                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                      paymentMethod === 'upi_qr'
+                        ? 'bg-amber-500/15 border-amber-400 shadow-sm ring-1 ring-amber-400/50'
+                        : 'bg-white/[0.02] border-white/10 hover:border-amber-500/30'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-[#E5C158] flex items-center justify-center">
+                        <QrCode className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-white">Scan UPI QR & Enter UTR (0% Gateway Fee)</h4>
+                        <p className="text-[10px] text-amber-200/90">Exact Amount to Pay: ₹{finalTotal}</p>
+                      </div>
+                    </div>
                     <input
-                      type="text"
-                      value={utrNumber}
-                      onChange={(e) => setUtrNumber(e.target.value)}
-                      placeholder="e.g. 432512345678"
-                      maxLength={22}
-                      className="w-full px-3 py-2 rounded-xl bg-black/70 border border-amber-500/40 text-xs text-white focus:outline-none focus:border-[#E5C158]"
+                      type="radio"
+                      name="payOption"
+                      checked={paymentMethod === 'upi_qr'}
+                      onChange={() => setPaymentMethod('upi_qr')}
+                      className="w-4 h-4 text-amber-500 accent-amber-500"
                     />
+                  </label>
+
+                  {paymentMethod === 'upi_qr' && (
+                    <div className="p-4 rounded-2xl bg-black/50 border border-[#D4AF37]/35 space-y-3 text-center">
+                      <p className="text-xs font-bold text-amber-300">
+                        Scan QR & Pay Exact Amount: ₹{finalTotal}
+                      </p>
+                      <img
+                        src="/upi-qr.jpg"
+                        alt="UPI Payment QR Code"
+                        className="w-44 h-44 mx-auto rounded-xl bg-white p-2 object-contain border border-amber-400/40"
+                      />
+                      <p className="text-[11px] text-gray-300">
+                        UPI ID: <span className="font-mono text-amber-200 select-all">YOUR_UPI_ID@upi</span>
+                      </p>
+                      <div className="text-left space-y-1">
+                        <label className="text-[11px] text-amber-200 font-medium block">
+                          Enter UTR / Transaction ID *
+                        </label>
+                        <input
+                          type="text"
+                          value={utrNumber}
+                          onChange={(e) => setUtrNumber(e.target.value)}
+                          placeholder="e.g. 632450710125"
+                          maxLength={22}
+                          className="w-full px-3 py-2 rounded-xl bg-black/70 border border-amber-500/40 text-xs text-white focus:outline-none focus:border-[#E5C158]"
+                        />
+                      </div>
+                      <label className="flex items-start gap-2 text-left text-[11px] text-gray-300 cursor-pointer pt-1">
+                        <input
+                          type="checkbox"
+                          checked={amountConfirmed}
+                          onChange={(e) => setAmountConfirmed(e.target.checked)}
+                          className="mt-0.5 accent-amber-500"
+                        />
+                        <span>
+                          Maine poora <strong className="text-amber-200">₹{finalTotal}</strong> bhej diya hai (kam amount bhejne par order verify nahi hoga).
+                        </span>
+                      </label>
+                    </div>
+                  )}
+                </div>
+
+                {/* Razorpay UPI Option */}
+                <label
+                  onClick={() => setPaymentMethod('upi')}
+                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                    paymentMethod === 'upi'
+                      ? 'bg-amber-500/15 border-amber-400 shadow-sm ring-1 ring-amber-400/50'
+                      : 'bg-white/[0.02] border-white/10 hover:border-amber-500/30'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-[#E5C158] flex items-center justify-center">
+                      <QrCode className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">UPI (Gateway)</h4>
+                      <p className="text-[10px] text-gray-400">UPI apps such as Google Pay, PhonePe and Navi</p>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                  <input
+                    type="radio"
+                    name="payOption"
+                    checked={paymentMethod === 'upi'}
+                    onChange={() => setPaymentMethod('upi')}
+                    className="w-4 h-4 text-amber-500 accent-amber-500"
+                  />
+                </label>
 
-            {/* Razorpay UPI Option */}
-            <label
-              onClick={() => setPaymentMethod('upi')}
-              className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-                paymentMethod === 'upi'
-                  ? 'bg-amber-500/15 border-amber-400 shadow-sm ring-1 ring-amber-400/50'
-                  : 'bg-white/[0.02] border-white/10 hover:border-amber-500/30'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-[#E5C158] flex items-center justify-center">
-                  <QrCode className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-white">UPI (Gateway)</h4>
-                  <p className="text-[10px] text-gray-400">UPI apps such as Google Pay, PhonePe and Navi</p>
-                </div>
-              </div>
-              <input
-                type="radio"
-                name="payOption"
-                checked={paymentMethod === 'upi'}
-                onChange={() => setPaymentMethod('upi')}
-                className="w-4 h-4 text-amber-500 accent-amber-500"
-              />
-            </label>
+                {/* Credit / Debit Card */}
+                <label
+                  onClick={() => setPaymentMethod('card')}
+                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                    paymentMethod === 'card'
+                      ? 'bg-amber-500/15 border-amber-400 shadow-sm ring-1 ring-amber-400/50'
+                      : 'bg-white/[0.02] border-white/10 hover:border-amber-500/30'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center">
+                      <CreditCard className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">Credit / Debit Card</h4>
+                      <p className="text-[10px] text-gray-400">Visa, Mastercard, RuPay</p>
+                    </div>
+                  </div>
+                  <input
+                    type="radio"
+                    name="payOption"
+                    checked={paymentMethod === 'card'}
+                    onChange={() => setPaymentMethod('card')}
+                    className="w-4 h-4 text-amber-500 accent-amber-500"
+                  />
+                </label>
 
-            {/* Credit / Debit Card */}
-            <label
-              onClick={() => setPaymentMethod('card')}
-              className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-                paymentMethod === 'card'
-                  ? 'bg-amber-500/15 border-amber-400 shadow-sm ring-1 ring-amber-400/50'
-                  : 'bg-white/[0.02] border-white/10 hover:border-amber-500/30'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center">
-                  <CreditCard className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-white">Credit / Debit Card</h4>
-                  <p className="text-[10px] text-gray-400">Visa, Mastercard, RuPay</p>
-                </div>
-              </div>
-              <input
-                type="radio"
-                name="payOption"
-                checked={paymentMethod === 'card'}
-                onChange={() => setPaymentMethod('card')}
-                className="w-4 h-4 text-amber-500 accent-amber-500"
-              />
-            </label>
+                {/* Net Banking */}
+                <label
+                  onClick={() => setPaymentMethod('netbanking')}
+                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                    paymentMethod === 'netbanking'
+                      ? 'bg-amber-500/15 border-amber-400 shadow-sm ring-1 ring-amber-400/50'
+                      : 'bg-white/[0.02] border-white/10 hover:border-amber-500/30'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center">
+                      <Building className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">Net Banking</h4>
+                      <p className="text-[10px] text-gray-400">All major Indian banks</p>
+                    </div>
+                  </div>
+                  <input
+                    type="radio"
+                    name="payOption"
+                    checked={paymentMethod === 'netbanking'}
+                    onChange={() => setPaymentMethod('netbanking')}
+                    className="w-4 h-4 text-amber-500 accent-amber-500"
+                  />
+                </label>
 
-            {/* Net Banking */}
-            <label
-              onClick={() => setPaymentMethod('netbanking')}
-              className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-                paymentMethod === 'netbanking'
-                  ? 'bg-amber-500/15 border-amber-400 shadow-sm ring-1 ring-amber-400/50'
-                  : 'bg-white/[0.02] border-white/10 hover:border-amber-500/30'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center">
-                  <Building className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-white">Net Banking</h4>
-                  <p className="text-[10px] text-gray-400">All major Indian banks</p>
-                </div>
-              </div>
-              <input
-                type="radio"
-                name="payOption"
-                checked={paymentMethod === 'netbanking'}
-                onChange={() => setPaymentMethod('netbanking')}
-                className="w-4 h-4 text-amber-500 accent-amber-500"
-              />
-            </label>
+                {/* Wallets */}
+                <label
+                  onClick={() => setPaymentMethod('wallets')}
+                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                    paymentMethod === 'wallets'
+                      ? 'bg-amber-500/15 border-amber-400 shadow-sm ring-1 ring-amber-400/50'
+                      : 'bg-white/[0.02] border-white/10 hover:border-amber-500/30'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+                      <Wallet className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">Wallets</h4>
+                      <p className="text-[10px] text-gray-400">PhonePe, Paytm, Amazon Pay</p>
+                    </div>
+                  </div>
+                  <input
+                    type="radio"
+                    name="payOption"
+                    checked={paymentMethod === 'wallets'}
+                    onChange={() => setPaymentMethod('wallets')}
+                    className="w-4 h-4 text-amber-500 accent-amber-500"
+                  />
+                </label>
 
-            {/* Wallets */}
-            <label
-              onClick={() => setPaymentMethod('wallets')}
-              className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-                paymentMethod === 'wallets'
-                  ? 'bg-amber-500/15 border-amber-400 shadow-sm ring-1 ring-amber-400/50'
-                  : 'bg-white/[0.02] border-white/10 hover:border-amber-500/30'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
-                  <Wallet className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-white">Wallets</h4>
-                  <p className="text-[10px] text-gray-400">PhonePe, Paytm, Amazon Pay</p>
-                </div>
+                {/* Cash on Delivery */}
+                <label
+                  onClick={() => setPaymentMethod('cod')}
+                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                    paymentMethod === 'cod'
+                      ? 'bg-amber-500/15 border-amber-400 shadow-sm ring-1 ring-amber-400/50'
+                      : 'bg-white/[0.02] border-white/10 hover:border-amber-500/30'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-300 flex items-center justify-center">
+                      <Banknote className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">Cash on Delivery</h4>
+                      <p className="text-[10px] text-gray-400">Pay when you receive the sacred parcel</p>
+                    </div>
+                  </div>
+                  <input
+                    type="radio"
+                    name="payOption"
+                    checked={paymentMethod === 'cod'}
+                    onChange={() => setPaymentMethod('cod')}
+                    className="w-4 h-4 text-amber-500 accent-amber-500"
+                  />
+                </label>
               </div>
-              <input
-                type="radio"
-                name="payOption"
-                checked={paymentMethod === 'wallets'}
-                onChange={() => setPaymentMethod('wallets')}
-                className="w-4 h-4 text-amber-500 accent-amber-500"
-              />
-            </label>
-
-            {/* Cash on Delivery */}
-            <label
-              onClick={() => setPaymentMethod('cod')}
-              className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-                paymentMethod === 'cod'
-                  ? 'bg-amber-500/15 border-amber-400 shadow-sm ring-1 ring-amber-400/50'
-                  : 'bg-white/[0.02] border-white/10 hover:border-amber-500/30'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-300 flex items-center justify-center">
-                  <Banknote className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-white">Cash on Delivery</h4>
-                  <p className="text-[10px] text-gray-400">Pay when you receive the sacred parcel</p>
-                </div>
-              </div>
-              <input
-                type="radio"
-                name="payOption"
-                checked={paymentMethod === 'cod'}
-                onChange={() => setPaymentMethod('cod')}
-                className="w-4 h-4 text-amber-500 accent-amber-500"
-              />
-            </label>
-          </div>
+            </>
+          )}
 
           {/* Secure Trust note */}
           <div className="flex items-center gap-2 p-3 rounded-xl bg-white/[0.02] border border-white/5 text-[11px] text-gray-400">
             <Lock className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>Your phone and delivery address are used to fulfill this order. Email is optional; we do not collect social-media IDs.</span>
+            <span>Address aur UTR details order fulfillment aur payment verification ke liye use hote hain.</span>
           </div>
 
         </div>
 
-        {/* Sticky Proceed to Pay Button */}
+        {/* Sticky Footer Button */}
         <div className="p-4 border-t border-white/10 bg-[#060a14]">
           {isProcessing ? (
             <div
@@ -555,8 +606,18 @@ export const CheckoutModal: React.FC = () => {
                 </p>
               </div>
             </div>
+          ) : step === 'address' ? (
+            <button
+              type="button"
+              onClick={handleContinueToPayment}
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black font-black text-xs uppercase tracking-wider shadow-lg hover:opacity-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <span>CONTINUE TO PAYMENT (₹{finalTotal})</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
           ) : (
             <button
+              type="button"
               onClick={handlePay}
               className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black font-black text-xs uppercase tracking-wider shadow-lg hover:opacity-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
