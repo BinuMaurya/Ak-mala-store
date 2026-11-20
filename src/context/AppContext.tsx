@@ -88,7 +88,7 @@ interface AppContextType {
 
   // Cart
   cart: CartItem[];
-  addToCart: (product: Product, size?: '16"' | '22"' | '28"' | '36"', customNotes?: string) => void;
+  addToCart: (product: Product, size?: '4"' | '8"' | '12"' | '16"', customNotes?: string) => void;
   removeFromCart: (cartItemId: string) => void;
   updateCartQuantity: (cartItemId: string, delta: number) => void;
   clearCart: () => void;
@@ -212,7 +212,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
-  const [isOwner, setIsOwner] = useState(import.meta.env.DEV);
+  const [isOwner, setIsOwner] = useState(false);
   const [isOwnerChecking, setIsOwnerChecking] = useState(false);
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
 
