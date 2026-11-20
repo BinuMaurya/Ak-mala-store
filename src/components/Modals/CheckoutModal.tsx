@@ -169,13 +169,16 @@ export const CheckoutModal: React.FC = () => {
         verifiedPaymentStatus = 'pending';
       } else {
         const payment = await startRazorpayCheckout({
-          cart,
-          couponCode: appliedCoupon,
-          expectedTotal: finalTotal,
-          method: paymentMethod === 'wallets' ? 'wallet' : paymentMethod,
-          customer,
-          visitorId
-        });
+  cart,
+  couponCode: appliedCoupon,
+  expectedTotal: finalTotal,
+  method: paymentMethod === 'wallets' ? 'wallet' : paymentMethod,
+  customer: {
+    ...customer,
+    email: customer.email || ''
+  },
+  visitorId
+});
         quote = payment.quote;
         orderNumber = payment.orderNumber;
         verifiedPaymentMethod = payment.paymentMethod;
@@ -196,8 +199,8 @@ export const CheckoutModal: React.FC = () => {
         address: customer.address,
         items: cart,
         ...quote,
-        paymentMethod: verifiedPaymentMethod,
-        paymentStatus: verifiedPaymentStatus,
+        paymentMethod: paymentMethod === 'upi_qr' ? 'upi' : verifiedPaymentMethod === 'upi_qr' ? 'upi' : verifiedPaymentMethod,
+        paymentStatus: paymentMethod === 'upi_qr' ? 'pending' : paymentMethod === 'cod' ? 'pending' : 'paid',
         orderStatus: 'confirmed',
         estimatedDelivery: 'Get it by 20 May - 22 May (Express Cold-Chain)'
       }, orderNumber);
