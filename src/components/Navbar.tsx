@@ -13,7 +13,6 @@ import {
   Flame,
   BarChart3,
   Sliders,
-  CheckCircle2,
   Layers,
   Settings
 } from 'lucide-react';
@@ -29,7 +28,6 @@ export const Navbar: React.FC = () => {
     setIsAuthOpen,
     setIsAdminOpen,
     isOwner,
-    setIsGalleryOpen,
     siteAssets,
     user,
     allProducts,
@@ -104,7 +102,7 @@ export const Navbar: React.FC = () => {
                 </span>
               </div>
               <span className="font-playfair italic text-[10px] sm:text-xs text-amber-300/80 tracking-wide">
-                Pure Devotion. Premium Quality.
+                {siteAssets.brandTagline || 'Pure Devotion. Premium Quality.'}
               </span>
             </div>
           </div>
@@ -435,15 +433,26 @@ export const Navbar: React.FC = () => {
               ✨ {t('navCustomMala')}
             </button>
             {isOwner && (
-              <button
-                onClick={() => {
-                  setIsDashboardOpen(true);
-                  setMobileMenuOpen(false);
-                }}
-                className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-left text-emerald-400"
-              >
-                📊 {t('navDashboard')}
-              </button>
+              <>
+                <button
+                  onClick={() => {
+                    setIsAdminOpen(true);
+                    setMobileMenuOpen(false);
+                  }}
+                  className="p-2.5 rounded-xl bg-amber-500/15 border border-amber-400/50 text-left text-[#E5C158] font-bold"
+                >
+                  ⚙️ Admin Studio
+                </button>
+                <button
+                  onClick={() => {
+                    setIsDashboardOpen(true);
+                    setMobileMenuOpen(false);
+                  }}
+                  className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-left text-emerald-400"
+                >
+                  📊 {t('navDashboard')}
+                </button>
+              </>
             )}
           </div>
         </div>
