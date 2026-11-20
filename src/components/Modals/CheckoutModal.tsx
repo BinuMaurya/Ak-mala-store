@@ -5,16 +5,12 @@ import { startRazorpayCheckout } from '../../services/razorpay';
 import { getConsentedVisitorId } from '../../services/analytics';
 import {
   X,
-  MapPin,
-  CheckCircle2,
   CreditCard,
   QrCode,
   Building,
   Wallet,
   Banknote,
-  ShieldCheck,
   ArrowRight,
-  Sparkles,
   Lock
 } from 'lucide-react';
 
@@ -34,7 +30,8 @@ export const CheckoutModal: React.FC = () => {
     showNotification
   } = useApp();
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(2); // Default on Payment as in screenshot
-  const [paymentMethod, setPaymentMethod] = useState<'upi' | 'card' | 'netbanking' | 'wallets' | 'cod'>('upi');
+  const [paymentMethod, setPaymentMethod] = useState<'upi_qr' | 'upi' | 'card' | 'netbanking' | 'wallets' | 'cod'>('upi_qr');
+  const [utrNumber, setUtrNumber] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [address, setAddress] = useState({
     name: '',
@@ -49,18 +46,26 @@ export const CheckoutModal: React.FC = () => {
 
   if (!isCheckoutOpen) return null;
 
+  const isValidAddress = () =>
+    Boolean(
+      address.name.trim() &&
+      (!address.email.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address.email.trim())) &&
+      address.line1.trim() &&
+      address.city.trim() &&
+      address.state.trim() &&
+      /^\d{6}$/.test(address.pincode) &&
+      /^\+?\d[\d\s()-]{8,}\d$/.test(address.phone)
+    );
+
   const handlePay = async () => {
-    if (
-      !address.name.trim() ||
-      (address.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address.email.trim())) ||
-      !address.line1.trim() ||
-      !address.city.trim() ||
-      !address.state.trim() ||
-      !/^\d{6}$/.test(address.pincode) ||
-      !/^\+?\d[\d\s()-]{8,}\d$/.test(address.phone)
-    ) {
+    if (!isValidAddress()) {
       setEditingAddress(true);
       showNotification('Please enter your name, valid phone, and complete delivery address.');
+      return;
+    }
+
+    if (paymentMethod === 'upi_qr' && !/^[a-zA-Z0-9]{10,22}$/.test(utrNumber.trim())) {
+      showNotification('Please enter a valid 10–22 character UPI UTR / Transaction ID.');
       return;
     }
 
@@ -80,9 +85,42 @@ export const CheckoutModal: React.FC = () => {
       const visitorId = getConsentedVisitorId();
       let quote = { subtotal, discount, deliveryCharge, total: finalTotal };
       let orderNumber: string;
-      let verifiedPaymentMethod: 'upi' | 'card' | 'netbanking' | 'wallet' | 'cod';
+      let verifiedPaymentMethod: 'upi_qr' | 'upi' | 'card' | 'netbanking' | 'wallet' | 'cod';
+      let verifiedPaymentStatus: 'pending' | 'pending_verification' | 'paid' = 'paid';
 
-      if (paymentMethod === 'cod') {
+      if (paymentMethod === 'upi_qr') {
+        const response = await fetch('/api/orders/upi-qr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            cart: cart.map(({ productId, selectedSize, quantity }) => ({
+              productId,
+              selectedSize,
+              quantity
+            })),
+            couponCode: appliedCoupon,
+            customer,
+            visitorId,
+            utrNumber: utrNumber.trim()
+          })
+        });
+        const result = await response.json() as {
+          order?: { order_number: string; total: number; subtotal: number; discount: number; delivery_charge: number };
+          error?: string;
+        };
+        if (!response.ok || !result.order) {
+          throw new Error(result.error || 'Unable to save your UPI order. Please try again.');
+        }
+        orderNumber = result.order.order_number;
+        quote = {
+          subtotal: result.order.subtotal,
+          discount: result.order.discount,
+          deliveryCharge: result.order.delivery_charge,
+          total: result.order.total
+        };
+        verifiedPaymentMethod = 'upi_qr';
+        verifiedPaymentStatus = 'pending_verification';
+      } else if (paymentMethod === 'cod') {
         const response = await fetch('/api/orders/cod', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -112,18 +150,20 @@ export const CheckoutModal: React.FC = () => {
           total: result.order.total
         };
         verifiedPaymentMethod = 'cod';
+        verifiedPaymentStatus = 'pending';
       } else {
         const payment = await startRazorpayCheckout({
-            cart,
-            couponCode: appliedCoupon,
-            expectedTotal: finalTotal,
-            method: paymentMethod === 'wallets' ? 'wallet' : paymentMethod,
-            customer,
-            visitorId
-          });
+          cart,
+          couponCode: appliedCoupon,
+          expectedTotal: finalTotal,
+          method: paymentMethod === 'wallets' ? 'wallet' : paymentMethod,
+          customer,
+          visitorId
+        });
         quote = payment.quote;
         orderNumber = payment.orderNumber;
         verifiedPaymentMethod = payment.paymentMethod;
+        verifiedPaymentStatus = 'paid';
       }
 
       confetti({
@@ -141,17 +181,20 @@ export const CheckoutModal: React.FC = () => {
         items: cart,
         ...quote,
         paymentMethod: verifiedPaymentMethod,
-        paymentStatus: paymentMethod === 'cod' ? 'pending' : 'paid',
+        paymentStatus: verifiedPaymentStatus,
         orderStatus: 'confirmed',
         estimatedDelivery: 'Get it by 20 May - 22 May (Express Cold-Chain)'
       }, orderNumber);
 
+      setUtrNumber('');
       setIsCheckoutOpen(false);
       setIsTrackerOpen(true);
       showNotification(
-        paymentMethod === 'cod'
-          ? `Cash on delivery order ${newOrder.id} placed.`
-          : `Payment verified. Order ${newOrder.id} placed successfully!`
+        paymentMethod === 'upi_qr'
+          ? `UPI order ${newOrder.id} submitted for UTR verification.`
+          : paymentMethod === 'cod'
+            ? `Cash on delivery order ${newOrder.id} placed.`
+            : `Payment verified. Order ${newOrder.id} placed successfully!`
       );
     } catch (error) {
       showNotification(error instanceof Error ? error.message : 'Payment failed. Please try again.');
@@ -163,7 +206,7 @@ export const CheckoutModal: React.FC = () => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md">
       <div className="relative w-full max-w-lg bg-[#080d19] border-2 border-[#D4AF37]/50 rounded-3xl shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col">
-        
+
         {/* Header Bar */}
         <div className="p-4 border-b border-white/10 flex items-center justify-between bg-[#060a14]">
           <h3 className="font-cinzel text-base font-bold text-white">Checkout</h3>
@@ -201,7 +244,7 @@ export const CheckoutModal: React.FC = () => {
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5">
-          
+
           {/* DELIVERY ADDRESS CARD */}
           <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10">
             <div className="flex items-center justify-between mb-2">
@@ -291,7 +334,65 @@ export const CheckoutModal: React.FC = () => {
               PAYMENT METHODS
             </span>
 
-            {/* UPI Option */}
+            {/* Direct UPI QR + UTR Option */}
+            <div className="space-y-2">
+              <label
+                onClick={() => setPaymentMethod('upi_qr')}
+                className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                  paymentMethod === 'upi_qr'
+                    ? 'bg-amber-500/15 border-amber-400 shadow-sm ring-1 ring-amber-400/50'
+                    : 'bg-white/[0.02] border-white/10 hover:border-amber-500/30'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-[#E5C158] flex items-center justify-center">
+                    <QrCode className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-white">Scan UPI QR & Enter UTR (0% Gateway Fee)</h4>
+                    <p className="text-[10px] text-gray-400">Pay ₹{finalTotal} via QR & submit UTR reference</p>
+                  </div>
+                </div>
+                <input
+                  type="radio"
+                  name="payOption"
+                  checked={paymentMethod === 'upi_qr'}
+                  onChange={() => setPaymentMethod('upi_qr')}
+                  className="w-4 h-4 text-amber-500 accent-amber-500"
+                />
+              </label>
+
+              {paymentMethod === 'upi_qr' && (
+                <div className="p-4 rounded-2xl bg-black/50 border border-[#D4AF37]/35 space-y-3 text-center">
+                  <p className="text-xs font-semibold text-amber-200">
+                    Scan QR & Pay ₹{finalTotal}
+                  </p>
+                  <img
+                    src="/upi-qr.png"
+                    alt="UPI Payment QR Code"
+                    className="w-44 h-44 mx-auto rounded-xl bg-white p-2 object-contain border border-amber-400/40"
+                  />
+                  <p className="text-[11px] text-gray-300">
+                    UPI ID: <span className="font-mono text-amber-200 select-all">binumaurya623@okaxis</span>
+                  </p>
+                  <div className="text-left space-y-1">
+                    <label className="text-[11px] text-amber-200 font-medium block">
+                      Enter UTR / Transaction ID *
+                    </label>
+                    <input
+                      type="text"
+                      value={utrNumber}
+                      onChange={(e) => setUtrNumber(e.target.value)}
+                      placeholder="e.g. 432512345678"
+                      maxLength={22}
+                      className="w-full px-3 py-2 rounded-xl bg-black/70 border border-amber-500/40 text-xs text-white focus:outline-none focus:border-[#E5C158]"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Razorpay UPI Option */}
             <label
               onClick={() => setPaymentMethod('upi')}
               className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
@@ -305,7 +406,7 @@ export const CheckoutModal: React.FC = () => {
                   <QrCode className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="text-xs font-bold text-white">UPI</h4>
+                  <h4 className="text-xs font-bold text-white">UPI (Gateway)</h4>
                   <p className="text-[10px] text-gray-400">UPI apps such as Google Pay, PhonePe and Navi</p>
                 </div>
               </div>
@@ -460,7 +561,11 @@ export const CheckoutModal: React.FC = () => {
               className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black font-black text-xs uppercase tracking-wider shadow-lg hover:opacity-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <span>
-                {paymentMethod === 'cod' ? 'PLACE ORDER (COD)' : `PROCEED TO PAY ₹${finalTotal}`}
+                {paymentMethod === 'cod'
+                  ? 'PLACE ORDER (COD)'
+                  : paymentMethod === 'upi_qr'
+                    ? `SUBMIT UTR & PLACE ORDER (₹${finalTotal})`
+                    : `PROCEED TO PAY ₹${finalTotal}`}
               </span>
               <ArrowRight className="w-4 h-4" />
             </button>

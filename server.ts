@@ -167,7 +167,7 @@ async function requireAdmin(request: Request): Promise<void> {
     .split(',')
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean);
-  
+
   if (adminEmails.length === 0) {
     throw new Error('Owner access is not configured.');
   }
@@ -640,6 +640,40 @@ app.post('/api/payments/verify', async (request: Request, response: Response) =>
   }
 });
 
+app.post('/api/orders/upi-qr', async (request: Request, response: Response) => {
+  try {
+    const body = getRequestBody(request);
+    const cartLines = parseCartLines(body.cart);
+    const customer = parseCheckoutCustomer(body.customer);
+    const visitorId = parseVisitorId(body.visitorId);
+    const utrNumber = typeof body.utrNumber === 'string' ? body.utrNumber.trim() : '';
+
+    if (!/^[a-zA-Z0-9]{10,22}$/.test(utrNumber)) {
+      response.status(400).json({ error: 'Please enter a valid 12-digit UPI UTR / Transaction ID.' });
+      return;
+    }
+
+    const orderFields = createStoredOrderFields(cartLines, customer, body.couponCode, visitorId);
+    const [order] = await supabaseRequest<StoredOrder[]>(
+      'orders',
+      'POST',
+      [{
+        ...orderFields,
+        order_number: createOrderNumber(),
+        payment_method: `upi_qr (UTR: ${utrNumber})`,
+        payment_status: 'pending_verification',
+        order_status: 'confirmed'
+      }],
+      'return=representation'
+    );
+
+    response.status(201).json({ order });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unable to save UPI order.';
+    response.status(400).json({ error: msg });
+  }
+});
+
 app.post('/api/orders/cod', async (request: Request, response: Response) => {
   try {
     const body = getRequestBody(request);
@@ -743,7 +777,7 @@ app.patch('/api/admin/orders/:id/status', async (request: Request, response: Res
     const body = getRequestBody(request);
     const orderId = request.params.id;
     const orderStatus = body.orderStatus;
-    
+
     if (orderStatus === 'out_for_delivery') {
       const currentOrders = await supabaseRequest<StoredOrder[]>(`orders?id=eq.${encodeURIComponent(orderId)}&select=*`, 'GET');
       const order = await sendAndStoreDeliveryOtp(currentOrders[0]);
@@ -826,7 +860,7 @@ if (process.env.VERCEL !== '1') {
 
     if (activePort >= port + maxPortAttempts) {
       console.error(`Ports ${port}-${activePort} are already in use. Set PORT to an available port and retry.`);
-      process.exitCode, 1;
+      process.exitCode = 1;
       return;
     }
 
