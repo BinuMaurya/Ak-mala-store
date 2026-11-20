@@ -17,6 +17,8 @@ import { trackEvent } from '../services/analytics';
 import { supabase } from '../services/supabase';
 import type { Session } from '@supabase/supabase-js';
 
+type MalaSize = '4"' | '8"' | '12"' | '16"';
+
 const defaultSiteAssets: SiteAssetsConfig = {
   heroGaneshaImage: '/ganpati_murti.png',
   heroHeadline: 'Divine Malas For',
@@ -88,7 +90,7 @@ interface AppContextType {
 
   // Cart
   cart: CartItem[];
-  addToCart: (product: Product, size?: '4"' | '8"' | '12"' | '16"', customNotes?: string) => void;
+  addToCart: (product: Product, size?: MalaSize, customNotes?: string) => void;
   removeFromCart: (cartItemId: string) => void;
   updateCartQuantity: (cartItemId: string, delta: number) => void;
   clearCart: () => void;
@@ -202,7 +204,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Coupon
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(siteAssets.offerCode || 'FEST15');
 
-  /// Modals & Panels
+  // Modals & Panels
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [selectedProductForDetail, setSelectedProductForDetail] = useState<Product | null>(null);
@@ -350,9 +352,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const syncSession = async (session: Session | null) => {
       const currentSequence = ++verificationSequence;
-    if (!session?.user) {
+      if (!session?.user) {
         setUser(null);
-        setIsOwner(true);
+        setIsOwner(false);
         setIsOwnerChecking(false);
         return;
       }
@@ -532,7 +534,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Cart operations
   const addToCart = (
     product: Product,
-    size: '16"' | '22"' | '28"' | '36"' = '22"',
+    size: MalaSize = '8"',
     customNotes?: string
   ) => {
     const sizeConfig = product.availableSizes.find((s) => s.size === size);
@@ -546,18 +548,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           item.id === cartItemId ? { ...item, quantity: item.quantity + 1 } : item
         );
       }
-      return [
-        ...prev,
-        {
-          id: cartItemId,
-          productId: product.id,
-          product,
-          selectedSize: size,
-          quantity: 1,
-          pricePerUnit: unitPrice,
-          customNotes
-        }
-      ];
+      const nextItem: CartItem = {
+        id: cartItemId,
+        productId: product.id,
+        product,
+        selectedSize: size as CartItem['selectedSize'],
+        quantity: 1,
+        pricePerUnit: unitPrice,
+        customNotes
+      };
+      return [...prev, nextItem];
     });
 
     showNotification(`Added "${product.name}" (${size}) to your sacred basket!`);
@@ -581,14 +581,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       flowers: [config.flowerType, config.pattern],
       description: `Personalized ${config.size} divine garland handcrafted with ${config.flowerType} flowers, ${config.pattern} pattern, and ${config.finishing} finish. Designed with love for ${config.deityTarget}.`,
       hindiDescription: `विशेष रूप से आपके आराध्य ${config.deityTarget} के लिए बनाई गई हस्तनिर्मित पवित्र माला।`,
-      availableSizes: [{ size: config.size, name: `${config.size} Custom`, extraPrice: 0 }],
+      availableSizes: [
+        {
+          size: config.size as Product['availableSizes'][number]['size'],
+          name: `${config.size} Custom`,
+          extraPrice: 0
+        }
+      ],
       freshnessHours: 72,
       inStock: true,
       fragranceLevel: 'Divine Sacred',
       bestForDeity: config.deityTarget
     };
 
-    addToCart(customProduct, config.size, config.customNotes);
+    addToCart(customProduct, config.size as MalaSize, config.customNotes);
     setIsCustomBuilderOpen(false);
     setIsCartOpen(true);
   };
