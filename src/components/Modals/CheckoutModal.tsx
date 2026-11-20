@@ -368,7 +368,7 @@ export const CheckoutModal: React.FC = () => {
                     Scan QR & Pay ₹{finalTotal}
                   </p>
                   <img
-                    src="/upi-qr.png"
+                    src="/upi-qr.jpg"
                     alt="UPI Payment QR Code"
                     className="w-44 h-44 mx-auto rounded-xl bg-white p-2 object-contain border border-amber-400/40"
                   />
