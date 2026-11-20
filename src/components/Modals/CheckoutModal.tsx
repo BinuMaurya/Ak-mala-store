@@ -414,7 +414,7 @@ export const CheckoutModal: React.FC = () => {
                         className="w-44 h-44 mx-auto rounded-xl bg-white p-2 object-contain border border-amber-400/40"
                       />
                       <p className="text-[11px] text-gray-300">
-                        UPI ID: <span className="font-mono text-amber-200 select-all">YOUR_UPI_ID@upi</span>
+                        UPI ID: <span className="font-mono text-amber-200 select-all">binumaurya623@oksbi</span>
                       </p>
                       <div className="text-left space-y-1">
                         <label className="text-[11px] text-amber-200 font-medium block">
