@@ -31,9 +31,7 @@ export const CheckoutModal: React.FC = () => {
   } = useApp();
 
   const [step, setStep] = useState<'address' | 'payment'>('address');
-  const [paymentMethod, setPaymentMethod] = useState<'upi_qr' | 'upi' | 'card' | 'netbanking' | 'wallets' | 'cod'>('upi_qr');
-  const [utrNumber, setUtrNumber] = useState('');
-  const [amountConfirmed, setAmountConfirmed] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'upi' | 'card' | 'netbanking' | 'wallets' | 'cod'>('upi');
   const [isProcessing, setIsProcessing] = useState(false);
   const [address, setAddress] = useState({
     name: '',
@@ -73,17 +71,6 @@ export const CheckoutModal: React.FC = () => {
       return;
     }
 
-    if (paymentMethod === 'upi_qr') {
-      if (!/^[a-zA-Z0-9]{10,22}$/.test(utrNumber.trim())) {
-        showNotification('Sahi 10 se 22 digit ka UTR / Transaction ID daalo.');
-        return;
-      }
-      if (!amountConfirmed) {
-        showNotification(`Confirm karo ki aapne poora ₹${finalTotal} pay kiya hai.`);
-        return;
-      }
-    }
-
     setIsProcessing(true);
     try {
       const customer = {
@@ -100,43 +87,10 @@ export const CheckoutModal: React.FC = () => {
       const visitorId = getConsentedVisitorId();
       let quote = { subtotal, discount, deliveryCharge, total: finalTotal };
       let orderNumber: string;
-      let verifiedPaymentMethod: 'upi_qr' | 'upi' | 'card' | 'netbanking' | 'wallet' | 'cod';
-      let verifiedPaymentStatus: 'pending' | 'pending_verification' | 'paid' = 'paid';
+      let verifiedPaymentMethod: 'upi' | 'card' | 'netbanking' | 'wallet' | 'cod';
+      let verifiedPaymentStatus: 'pending' | 'paid' = 'paid';
 
-      if (paymentMethod === 'upi_qr') {
-        const response = await fetch('/api/orders/upi-qr', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            cart: cart.map(({ productId, selectedSize, quantity }) => ({
-              productId,
-              selectedSize,
-              quantity
-            })),
-            couponCode: appliedCoupon,
-            customer,
-            visitorId,
-            utrNumber: utrNumber.trim(),
-            declaredAmount: finalTotal
-          })
-        });
-        const result = await response.json() as {
-          order?: { order_number: string; total: number; subtotal: number; discount: number; delivery_charge: number };
-          error?: string;
-        };
-        if (!response.ok || !result.order) {
-          throw new Error(result.error || 'Order save nahi ho paya. Dobara try karo.');
-        }
-        orderNumber = result.order.order_number;
-        quote = {
-          subtotal: result.order.subtotal,
-          discount: result.order.discount,
-          deliveryCharge: result.order.delivery_charge,
-          total: result.order.total
-        };
-        verifiedPaymentMethod = 'upi_qr';
-        verifiedPaymentStatus = 'pending_verification';
-      } else if (paymentMethod === 'cod') {
+      if (paymentMethod === 'cod') {
         const response = await fetch('/api/orders/cod', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -169,16 +123,16 @@ export const CheckoutModal: React.FC = () => {
         verifiedPaymentStatus = 'pending';
       } else {
         const payment = await startRazorpayCheckout({
-  cart,
-  couponCode: appliedCoupon,
-  expectedTotal: finalTotal,
-  method: paymentMethod === 'wallets' ? 'wallet' : paymentMethod,
-  customer: {
-    ...customer,
-    email: customer.email || ''
-  },
-  visitorId
-});
+          cart,
+          couponCode: appliedCoupon,
+          expectedTotal: finalTotal,
+          method: paymentMethod === 'wallets' ? 'wallet' : paymentMethod,
+          customer: {
+            ...customer,
+            email: customer.email || ''
+          },
+          visitorId
+        });
         quote = payment.quote;
         orderNumber = payment.orderNumber;
         verifiedPaymentMethod = payment.paymentMethod;
@@ -199,22 +153,18 @@ export const CheckoutModal: React.FC = () => {
         address: customer.address,
         items: cart,
         ...quote,
-        paymentMethod: paymentMethod === 'upi_qr' ? 'upi' : verifiedPaymentMethod === 'upi_qr' ? 'upi' : verifiedPaymentMethod,
-        paymentStatus: paymentMethod === 'upi_qr' ? 'pending' : paymentMethod === 'cod' ? 'pending' : 'paid',
+        paymentMethod: verifiedPaymentMethod,
+        paymentStatus: verifiedPaymentStatus,
         orderStatus: 'confirmed',
         estimatedDelivery: 'Get it by 20 May - 22 May (Express Cold-Chain)'
       }, orderNumber);
 
-      setUtrNumber('');
-      setAmountConfirmed(false);
       setIsCheckoutOpen(false);
       setIsTrackerOpen(true);
       showNotification(
-        paymentMethod === 'upi_qr'
-          ? `Order ${newOrder.id} (₹${quote.total}) UTR ke saath submit ho gaya. Admin dashboard mein check karein.`
-          : paymentMethod === 'cod'
-            ? `Cash on delivery order ${newOrder.id} placed.`
-            : `Payment verified. Order ${newOrder.id} placed successfully!`
+        paymentMethod === 'cod'
+          ? `Cash on delivery order ${newOrder.id} placed.`
+          : `Payment verified. Order ${newOrder.id} placed successfully!`
       );
     } catch (error) {
       showNotification(error instanceof Error ? error.message : 'Order submit nahi ho paya.');
@@ -371,80 +321,16 @@ export const CheckoutModal: React.FC = () => {
 
               {/* PAYMENT METHODS */}
               <div className="space-y-2.5">
-                <span className="text-xs font-bold uppercase tracking-wider text-gray-300 block">
-                  PAYMENT METHODS
-                </span>
-
-                {/* Direct UPI QR + UTR Option */}
-                <div className="space-y-2">
-                  <label
-                    onClick={() => setPaymentMethod('upi_qr')}
-                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-                      paymentMethod === 'upi_qr'
-                        ? 'bg-amber-500/15 border-amber-400 shadow-sm ring-1 ring-amber-400/50'
-                        : 'bg-white/[0.02] border-white/10 hover:border-amber-500/30'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-[#E5C158] flex items-center justify-center">
-                        <QrCode className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-bold text-white">Scan UPI QR & Enter UTR (0% Gateway Fee)</h4>
-                        <p className="text-[10px] text-amber-200/90">Exact Amount to Pay: ₹{finalTotal}</p>
-                      </div>
-                    </div>
-                    <input
-                      type="radio"
-                      name="payOption"
-                      checked={paymentMethod === 'upi_qr'}
-                      onChange={() => setPaymentMethod('upi_qr')}
-                      className="w-4 h-4 text-amber-500 accent-amber-500"
-                    />
-                  </label>
-
-                  {paymentMethod === 'upi_qr' && (
-                    <div className="p-4 rounded-2xl bg-black/50 border border-[#D4AF37]/35 space-y-3 text-center">
-                      <p className="text-xs font-bold text-amber-300">
-                        Scan QR & Pay Exact Amount: ₹{finalTotal}
-                      </p>
-                      <img
-                        src="/upi-qr.jpg"
-                        alt="UPI Payment QR Code"
-                        className="w-44 h-44 mx-auto rounded-xl bg-white p-2 object-contain border border-amber-400/40"
-                      />
-                      <p className="text-[11px] text-gray-300">
-                        UPI ID: <span className="font-mono text-amber-200 select-all">binumaurya623@oksbi</span>
-                      </p>
-                      <div className="text-left space-y-1">
-                        <label className="text-[11px] text-amber-200 font-medium block">
-                          Enter UTR / Transaction ID *
-                        </label>
-                        <input
-                          type="text"
-                          value={utrNumber}
-                          onChange={(e) => setUtrNumber(e.target.value)}
-                          placeholder="e.g. 632450710125"
-                          maxLength={22}
-                          className="w-full px-3 py-2 rounded-xl bg-black/70 border border-amber-500/40 text-xs text-white focus:outline-none focus:border-[#E5C158]"
-                        />
-                      </div>
-                      <label className="flex items-start gap-2 text-left text-[11px] text-gray-300 cursor-pointer pt-1">
-                        <input
-                          type="checkbox"
-                          checked={amountConfirmed}
-                          onChange={(e) => setAmountConfirmed(e.target.checked)}
-                          className="mt-0.5 accent-amber-500"
-                        />
-                        <span>
-                          Maine poora <strong className="text-amber-200">₹{finalTotal}</strong> bhej diya hai (kam amount bhejne par order verify nahi hoga).
-                        </span>
-                      </label>
-                    </div>
-                  )}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-gray-300 block">
+                    RAZORPAY PAYMENT METHODS
+                  </span>
+                  <span className="text-[11px] text-amber-200 font-semibold">
+                    Exact Amount: ₹{finalTotal}
+                  </span>
                 </div>
 
-                {/* Razorpay UPI Option */}
+                {/* Razorpay UPI */}
                 <label
                   onClick={() => setPaymentMethod('upi')}
                   className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
@@ -458,8 +344,8 @@ export const CheckoutModal: React.FC = () => {
                       <QrCode className="w-5 h-5" />
                     </div>
                     <div>
-                      <h4 className="text-xs font-bold text-white">UPI (Gateway)</h4>
-                      <p className="text-[10px] text-gray-400">UPI apps such as Google Pay, PhonePe and Navi</p>
+                      <h4 className="text-xs font-bold text-white">UPI / QR (Razorpay)</h4>
+                      <p className="text-[10px] text-gray-400">Google Pay, PhonePe, Paytm, BHIM & UPI apps</p>
                     </div>
                   </div>
                   <input
@@ -585,7 +471,7 @@ export const CheckoutModal: React.FC = () => {
           {/* Secure Trust note */}
           <div className="flex items-center gap-2 p-3 rounded-xl bg-white/[0.02] border border-white/5 text-[11px] text-gray-400">
             <Lock className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>Address aur UTR details order fulfillment aur payment verification ke liye use hote hain.</span>
+            <span>Payments Razorpay ke through exact order amount (₹{finalTotal}) ke saath securely process hote hain.</span>
           </div>
 
         </div>
@@ -627,9 +513,7 @@ export const CheckoutModal: React.FC = () => {
               <span>
                 {paymentMethod === 'cod'
                   ? 'PLACE ORDER (COD)'
-                  : paymentMethod === 'upi_qr'
-                    ? `SUBMIT UTR & PLACE ORDER (₹${finalTotal})`
-                    : `PROCEED TO PAY ₹${finalTotal}`}
+                  : `PROCEED TO PAY ₹${finalTotal}`}
               </span>
               <ArrowRight className="w-4 h-4" />
             </button>

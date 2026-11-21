@@ -19,6 +19,7 @@ media in Supabase. The browser never receives the server-only secret key.
    SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLISHABLE_KEY
    SUPABASE_SECRET_KEY=YOUR_SERVER_ONLY_SECRET_KEY
    ADMIN_EMAILS=owner@example.com
+   ADMIN_ACCESS_CODE=YOUR_STRONG_SERVER_ONLY_ADMIN_CODE
    ```
 
    The Vite build uses `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` for browser
@@ -59,11 +60,11 @@ Restart `npm run dev` after changing `.env`. The checkout reports a configuratio
 error until both Supabase and Razorpay are configured.
 
 `ADMIN_EMAILS` is a comma-separated allowlist of verified owner email
-addresses. Only those accounts can read orders or analytics. The dashboard
-authenticates with Supabase email OTP and the server checks each request.
-Sign in through the store's Login button with an allowlisted owner email to
-reveal the owner dashboard and media-management controls; customer accounts do
-not see those controls.
+addresses for Supabase owner sign-in. Alternatively, set `ADMIN_ACCESS_CODE`
+to a strong, server-only secret to unlock the dashboard through
+`/api/admin/unlock`. Keep this code out of `VITE_*` variables and browser
+builds; the server returns it as the dashboard's bearer token after successful
+unlock. Either credential is checked by admin APIs.
 
 Analytics collection is off until a visitor accepts the consent notice. It
 records page/product views and wishlist actions against a random browser ID,
@@ -77,4 +78,5 @@ for payment, order, analytics, owner-dashboard, shared catalog, and signed media
 upload APIs. Catalog changes are stored in Supabase so all visitors see them;
 uploaded images and videos are stored in the `ak-mala-media` public bucket.
 Files are limited to 50 MB. In production, set `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`,
-`SUPABASE_SECRET_KEY`, and `ADMIN_EMAILS` for Production, then redeploy.
+`SUPABASE_SECRET_KEY`, and either `ADMIN_EMAILS` or `ADMIN_ACCESS_CODE` for
+Production, then redeploy.

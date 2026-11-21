@@ -9,6 +9,7 @@ import type { StoreContent } from './src/types/index.js';
 const app = express();
 const port = Number(process.env.PORT || 3000);
 const isProduction = process.env.NODE_ENV === 'production';
+const ADMIN_ACCESS_CODE = String(process.env.ADMIN_ACCESS_CODE || '').trim();
 const freeDeliveryThreshold = 999;
 const deliveryFee = 99;
 const festivalCouponCode = 'FEST15';
@@ -159,6 +160,11 @@ async function supabaseRequest<T>(
 // ==================== ADMIN AUTH ====================
 async function requireAdmin(request: Request): Promise<void> {
   const authorization = request.headers.authorization;
+  const providedCode = authorization?.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length).trim()
+    : '';
+  if (ADMIN_ACCESS_CODE && providedCode === ADMIN_ACCESS_CODE) return;
+
   if (!authorization?.startsWith('Bearer ')) {
     throw new Error('Please sign in with the authorized owner account.');
   }
@@ -749,6 +755,19 @@ app.post('/api/analytics/events', async (request: Request, response: Response) =
 });
 
 // ==================== ADMIN DASHBOARD & ORDERS ====================
+app.post('/api/admin/unlock', (request: Request, response: Response) => {
+  const providedCode = String((request.body as { code?: string } | undefined)?.code || '').trim();
+  if (!ADMIN_ACCESS_CODE) {
+    response.status(500).json({ error: 'ADMIN_ACCESS_CODE server env mein set nahi hai.' });
+    return;
+  }
+  if (!providedCode || providedCode !== ADMIN_ACCESS_CODE) {
+    response.status(401).json({ error: 'Galat admin code.' });
+    return;
+  }
+  response.json({ ok: true, token: ADMIN_ACCESS_CODE });
+});
+
 app.get('/api/admin/access', async (request: Request, response: Response) => {
   try {
     await requireAdmin(request);

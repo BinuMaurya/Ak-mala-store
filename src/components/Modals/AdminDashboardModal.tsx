@@ -4,8 +4,9 @@ import { supabase } from '../../services/supabase';
 import {
   Activity,
   Download,
-  LockKeyhole,
+  KeyRound,
   LogOut,
+  MessageCircle,
   Package,
   Printer,
   ShoppingBag,
@@ -47,23 +48,71 @@ interface DashboardData {
 }
 
 const orderStatuses = ['confirmed', 'packed', 'shipped', 'out_for_delivery', 'delivered'] as const;
-
+const ADMIN_SESSION_STORAGE_KEY = 'ak_mala_admin_token';
+const FALLBACK_ADMIN_CODE = String(
+  (import.meta.env as Record<string, string | undefined>).VITE_ADMIN_CODE || ''
+).trim();
 function escapeCsv(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
 }
 
+function formatWhatsAppPhone(rawPhone: string): string {
+  const digits = rawPhone.replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.length === 10) return `91${digits}`;
+  return digits;
+}
+
+function buildWhatsAppMessage(order: DashboardOrder, stage: 'confirm' | 'shipped' | 'delivered'): string {
+  const itemsText = order.items
+    .map((item) => `${item.productName} (${item.selectedSize}) x${item.quantity}`)
+    .join(', ');
+
+  if (stage === 'shipped') {
+    return [
+      `Namaste ${order.customer_name},`,
+      `Aapka *AK MALA* order *#${order.order_number}* ship ho gaya hai.`,
+      `Items: ${itemsText}`,
+      `Total: ₹${order.total.toLocaleString('en-IN')} (${order.payment_status.toUpperCase()})`,
+      `Address: ${order.shipping_address.line1}, ${order.shipping_address.city}, ${order.shipping_address.state} - ${order.shipping_address.pincode}`
+    ].join('\n');
+  }
+
+  if (stage === 'delivered') {
+    return [
+      `Namaste ${order.customer_name},`,
+      `Aapka *AK MALA* order *#${order.order_number}* deliver ho chuka hai.`,
+      `Hamare saath shopping karne ke liye dhanyawad! Koi bhi sahayata ho toh isi WhatsApp par message karein.`
+    ].join('\n');
+  }
+
+  return [
+    `Namaste ${order.customer_name},`,
+    `Aapka *AK MALA* order *#${order.order_number}* confirm ho gaya hai.`,
+    `Items: ${itemsText}`,
+    `Total Amount: ₹${order.total.toLocaleString('en-IN')} (${order.payment_method.toUpperCase()} · ${order.payment_status.toUpperCase()})`,
+    `Delivery Address: ${order.shipping_address.line1}, ${order.shipping_address.city}, ${order.shipping_address.state} - ${order.shipping_address.pincode}`
+  ].join('\n');
+}
+
 export const AdminDashboardModal: React.FC = () => {
-  const { isDashboardOpen, isOwner, isOwnerChecking, setIsDashboardOpen, showNotification, allProducts } = useApp();
-  const [email, setEmail] = useState('');
-  const [otp, setOtp] = useState('');
-  const [waitingForOtp, setWaitingForOtp] = useState(false);
-  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const { isDashboardOpen, setIsDashboardOpen, showNotification, allProducts } = useApp();
+  const [adminCode, setAdminCode] = useState('');
+  const [adminToken, setAdminToken] = useState<string | null>(() => {
+    try {
+      return window.sessionStorage.getItem(ADMIN_SESSION_STORAGE_KEY);
+    } catch {
+      return null;
+    }
+  });
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [printingOrder, setPrintingOrder] = useState<DashboardOrder | null>(null);
   const [deliveryCodes, setDeliveryCodes] = useState<Record<string, string>>({});
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+
+  const isUnlocked = Boolean(adminToken);
 
   useEffect(() => {
     if (!printingOrder) return;
@@ -75,27 +124,16 @@ export const AdminDashboardModal: React.FC = () => {
   }, [printingOrder]);
 
   useEffect(() => {
-    if (!supabase) return;
-    let active = true;
-    void supabase.auth.getSession().then(({ data: sessionData }) => {
-      if (active) setAccessToken(sessionData.session?.access_token || null);
-    });
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (active) setAccessToken(session?.access_token || null);
-    });
-    return () => {
-      active = false;
-      authListener.subscription.unsubscribe();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!isDashboardOpen || !isOwner || !accessToken) return;
+    if (!isDashboardOpen || !adminToken) return;
     let cancelled = false;
     setLoading(true);
     setError('');
+
     void fetch('/api/admin/data', {
-      headers: { Authorization: `Bearer ${accessToken}` }
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        'x-admin-code': adminToken
+      }
     })
       .then(async (response) => {
         const result = (await response.json()) as DashboardData & { error?: string };
@@ -111,16 +149,18 @@ export const AdminDashboardModal: React.FC = () => {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
+
     return () => {
       cancelled = true;
     };
-  }, [isDashboardOpen, isOwner, accessToken]);
+  }, [isDashboardOpen, adminToken]);
 
   const metrics = useMemo(() => {
     const events = data?.events || [];
     const orders = data?.orders || [];
     const productNames = new Map(allProducts.map((product) => [product.id, product.name]));
     const productActivity = new Map<string, { views: number; netWishlist: number }>();
+
     events.forEach((event) => {
       if (!event.product_id || !['product_view', 'wishlist_add', 'wishlist_remove'].includes(event.event_type)) return;
       const current = productActivity.get(event.product_id) || { views: 0, netWishlist: 0 };
@@ -129,8 +169,10 @@ export const AdminDashboardModal: React.FC = () => {
       if (event.event_type === 'wishlist_remove') current.netWishlist -= 1;
       productActivity.set(event.product_id, current);
     });
+
     orders.forEach((order) => order.items.forEach((item) => productNames.set(item.productId, item.productName)));
     const paidOrders = orders.filter((order) => order.payment_status === 'paid');
+
     return {
       visitors: new Set(events.map((event) => event.visitor_id)).size,
       pageViews: events.filter((event) => event.event_type === 'page_view').length,
@@ -149,55 +191,92 @@ export const AdminDashboardModal: React.FC = () => {
 
   if (!isDashboardOpen) return null;
 
-  const sendOwnerCode = async (event: React.FormEvent) => {
+  const unlockAdminPanel = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!supabase) {
-      setError('Owner sign-in is not configured. Check Supabase environment variables.');
+    const cleanedCode = adminCode.trim();
+    if (!cleanedCode) {
+      setError('Admin code daalein.');
       return;
     }
+
     setLoading(true);
     setError('');
-    const { error: signInError } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: {
-        emailRedirectTo: window.location.origin,
-        shouldCreateUser: true
+
+    try {
+      const response = await fetch('/api/admin/unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: cleanedCode })
+      });
+
+      if (response.ok) {
+        const result = (await response.json()) as { token?: string; ok?: boolean };
+        const tokenValue = result.token || cleanedCode;
+        try {
+          window.sessionStorage.setItem(ADMIN_SESSION_STORAGE_KEY, tokenValue);
+        } catch {
+          // ignore storage error
+        }
+        setAdminToken(tokenValue);
+        setAdminCode('');
+        showNotification('Admin panel unlocked.');
+        return;
       }
-    });
-    setLoading(false);
-    if (signInError) {
-      setError(signInError.message);
-      return;
+
+      if (FALLBACK_ADMIN_CODE && cleanedCode === FALLBACK_ADMIN_CODE) {
+        try {
+          window.sessionStorage.setItem(ADMIN_SESSION_STORAGE_KEY, cleanedCode);
+        } catch {
+          // ignore storage error
+        }
+        setAdminToken(cleanedCode);
+        setAdminCode('');
+        showNotification('Admin panel unlocked.');
+        return;
+      }
+
+      const errData = (await response.json().catch(() => ({}))) as { error?: string };
+      throw new Error(errData.error || 'Galat admin code.');
+    } catch (unlockError) {
+      setError(unlockError instanceof Error ? unlockError.message : 'Admin panel unlock nahi ho paya.');
+    } finally {
+      setLoading(false);
     }
-    setWaitingForOtp(true);
-    showNotification('A one-time owner sign-in code / link was sent to your email.');
   };
 
-  const verifyOwnerCode = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!supabase) return;
-    setLoading(true);
+  const lockAdminPanel = () => {
+    try {
+      window.sessionStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
+    } catch {
+      // ignore storage error
+    }
+    setAdminToken(null);
+    setData(null);
     setError('');
-    const { data: authData, error: verifyError } = await supabase.auth.verifyOtp({
-      email: email.trim(),
-      token: otp.trim(),
-      type: 'email'
-    });
-    setLoading(false);
-    if (verifyError) {
-      setError(verifyError.message);
+    void supabase?.auth.signOut();
+  };
+
+  const openOrderOnWhatsApp = (order: DashboardOrder, stage: 'confirm' | 'shipped' | 'delivered') => {
+    const phone = formatWhatsAppPhone(order.phone);
+    if (!phone) {
+      showNotification('Customer ka valid phone number nahi mila.');
       return;
     }
-    setAccessToken(authData.session?.access_token || null);
+    const text = encodeURIComponent(buildWhatsAppMessage(order, stage));
+    window.open(`https://wa.me/${phone}?text=${text}`, '_blank', 'noopener,noreferrer');
   };
 
   const updateStatus = async (order: DashboardOrder, orderStatus: string) => {
-    if (!accessToken) return;
+    if (!adminToken) return;
     setUpdatingOrderId(order.id);
     try {
       const response = await fetch(`/api/admin/orders/${encodeURIComponent(order.id)}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+          'x-admin-code': adminToken
+        },
         body: JSON.stringify({ orderStatus })
       });
       const result = (await response.json()) as { order?: DashboardOrder; message?: string; error?: string };
@@ -217,12 +296,16 @@ export const AdminDashboardModal: React.FC = () => {
   };
 
   const confirmDelivery = async (order: DashboardOrder) => {
-    if (!accessToken) return;
+    if (!adminToken) return;
     setUpdatingOrderId(order.id);
     try {
       const response = await fetch(`/api/admin/orders/${encodeURIComponent(order.id)}/deliver`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+          'x-admin-code': adminToken
+        },
         body: JSON.stringify({ code: deliveryCodes[order.id] || '' })
       });
       const result = (await response.json()) as { order?: DashboardOrder; message?: string; error?: string };
@@ -272,70 +355,53 @@ export const AdminDashboardModal: React.FC = () => {
         <header className="flex items-center justify-between border-b border-white/10 bg-[#060a14] p-4 sm:p-5">
           <div>
             <h3 className="font-cinzel text-base font-bold text-white">Owner Dashboard</h3>
-            <p className="mt-1 text-[11px] text-gray-400">Real consented analytics and saved store orders</p>
+            <p className="mt-1 text-[11px] text-gray-400">Admin code se unlock karein aur orders WhatsApp se manage karein</p>
           </div>
           <div className="flex items-center gap-2">
-            {accessToken && (
+            {isUnlocked && (
               <button
-                onClick={() => void supabase?.auth.signOut()}
-                className="flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-2 text-xs text-gray-300"
+                type="button"
+                onClick={lockAdminPanel}
+                className="flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-2 text-xs text-gray-300 hover:bg-white/5 cursor-pointer"
               >
-                <LogOut className="h-3.5 w-3.5" /> Sign out
+                <LogOut className="h-3.5 w-3.5" /> Lock
               </button>
             )}
-            <button onClick={() => setIsDashboardOpen(false)} className="rounded-lg bg-white/5 p-1.5 text-gray-400 hover:text-white">
+            <button
+              type="button"
+              onClick={() => setIsDashboardOpen(false)}
+              className="rounded-lg bg-white/5 p-1.5 text-gray-400 hover:text-white cursor-pointer"
+            >
               <X className="h-5 w-5" />
             </button>
           </div>
         </header>
 
-        {isOwnerChecking ? (
-          <div className="p-10 text-center text-sm text-amber-200">Verifying owner permission…</div>
-        ) : !accessToken ? (
+        {!isUnlocked ? (
           <div className="m-auto w-full max-w-sm space-y-4 p-6">
-            <LockKeyhole className="mx-auto h-9 w-9 text-amber-300" />
+            <KeyRound className="mx-auto h-9 w-9 text-amber-300" />
             <p className="text-center text-xs text-gray-300">
-              Sign in with the verified owner email configured in the server's <code>ADMIN_EMAILS</code> allowlist.
+              Apna secret <strong>Admin Code</strong> daal kar dashboard kholein.
             </p>
-            {!waitingForOtp ? (
-              <form onSubmit={sendOwnerCode} className="space-y-3">
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="Owner email"
-                  autoComplete="email"
-                  className="w-full rounded-xl border border-white/20 bg-black/50 p-3 text-sm text-white"
-                />
-                <button disabled={loading} className="w-full rounded-xl bg-amber-400 p-3 text-sm font-bold text-black disabled:opacity-50">
-                  {loading ? 'Sending code…' : 'Send sign-in code'}
-                </button>
-              </form>
-            ) : (
-              <form onSubmit={verifyOwnerCode} className="space-y-3">
-                <input
-                  inputMode="numeric"
-                  required
-                  value={otp}
-                  onChange={(event) => setOtp(event.target.value)}
-                  placeholder="Email verification code"
-                  className="w-full rounded-xl border border-white/20 bg-black/50 p-3 text-sm text-white"
-                />
-                <button disabled={loading} className="w-full rounded-xl bg-amber-400 p-3 text-sm font-bold text-black disabled:opacity-50">
-                  {loading ? 'Verifying…' : 'Verify owner code'}
-                </button>
-              </form>
-            )}
+            <form onSubmit={unlockAdminPanel} className="space-y-3">
+              <input
+                type="password"
+                required
+                value={adminCode}
+                onChange={(event) => setAdminCode(event.target.value)}
+                placeholder="Enter Admin Code"
+                autoComplete="current-password"
+                className="w-full rounded-xl border border-white/20 bg-black/50 p-3 text-sm text-white focus:border-amber-400 focus:outline-none"
+              />
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full rounded-xl bg-amber-400 p-3 text-sm font-bold text-black disabled:opacity-50 cursor-pointer"
+              >
+                {loading ? 'Unlocking…' : 'Unlock Admin Panel'}
+              </button>
+            </form>
             {error && <p role="alert" className="text-center text-xs text-red-300">{error}</p>}
-          </div>
-        ) : !isOwner ? (
-          <div className="m-auto max-w-md space-y-3 p-8 text-center">
-            <LockKeyhole className="mx-auto h-9 w-9 text-red-300" />
-            <p className="text-sm font-semibold text-white">Owner access not authorized for this account</p>
-            <p className="text-xs text-gray-400">
-              Check that your signed-in email is listed in <code>ADMIN_EMAILS</code> on the backend server.
-            </p>
           </div>
         ) : loading ? (
           <div className="p-10 text-center text-sm text-amber-200">Loading owner data…</div>
@@ -361,6 +427,134 @@ export const AdminDashboardModal: React.FC = () => {
                 </div>
               ))}
             </div>
+
+            <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-amber-300">
+                  Orders & WhatsApp Management
+                </h4>
+                <button
+                  type="button"
+                  onClick={exportOrders}
+                  className="flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-2 text-xs text-amber-200 cursor-pointer"
+                >
+                  <Download className="h-3.5 w-3.5" /> Export CSV
+                </button>
+              </div>
+              <div className="space-y-3">
+                {(data?.orders || []).map((order) => (
+                  <article key={order.id} className="rounded-xl border border-white/10 bg-black/30 p-3 text-xs">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-white">
+                          {order.order_number} · {order.customer_name}
+                        </p>
+                        <p className="mt-1 text-gray-300">
+                          {order.phone}
+                          {order.email ? ` · ${order.email}` : ''}
+                        </p>
+                        <p className="mt-1 text-gray-400">
+                          {order.shipping_address.line1}, {order.shipping_address.city}, {order.shipping_address.state} -{' '}
+                          {order.shipping_address.pincode}
+                        </p>
+                        <p className="mt-2 text-gray-300">
+                          {order.items.map((item) => `${item.productName} (${item.selectedSize}) × ${item.quantity}`).join(' · ')}
+                        </p>
+                        <p className="mt-1 font-bold text-amber-200">
+                          ₹{order.total.toLocaleString('en-IN')} · {order.payment_method.toUpperCase()} /{' '}
+                          {order.payment_status.toUpperCase()}
+                        </p>
+
+                        {/* WhatsApp Quick Actions */}
+                        <div className="mt-2.5 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openOrderOnWhatsApp(order, 'confirm')}
+                            className="flex items-center gap-1 rounded-lg bg-emerald-500/20 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/30 cursor-pointer"
+                          >
+                            <MessageCircle className="h-3.5 w-3.5" /> WhatsApp Confirm
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openOrderOnWhatsApp(order, 'shipped')}
+                            className="flex items-center gap-1 rounded-lg bg-blue-500/20 px-2.5 py-1.5 text-[11px] font-semibold text-blue-300 hover:bg-blue-500/30 cursor-pointer"
+                          >
+                            <MessageCircle className="h-3.5 w-3.5" /> WhatsApp Shipped
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openOrderOnWhatsApp(order, 'delivered')}
+                            className="flex items-center gap-1 rounded-lg bg-amber-500/20 px-2.5 py-1.5 text-[11px] font-semibold text-amber-200 hover:bg-amber-500/30 cursor-pointer"
+                          >
+                            <MessageCircle className="h-3.5 w-3.5" /> WhatsApp Delivered
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-end gap-2">
+                        <div className="flex items-center gap-2">
+                          <select
+                            aria-label={`Status for ${order.order_number}`}
+                            value={order.order_status}
+                            disabled={updatingOrderId === order.id}
+                            onChange={(event) => void updateStatus(order, event.target.value)}
+                            className="rounded-lg border border-white/20 bg-[#101827] p-2 text-xs text-white disabled:opacity-50"
+                          >
+                            {orderStatuses
+                              .filter((status) => status !== 'delivered' || order.order_status === 'delivered')
+                              .map((status) => (
+                                <option key={status} value={status}>
+                                  {status.replaceAll('_', ' ')}
+                                </option>
+                              ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => setPrintingOrder(order)}
+                            className="flex items-center gap-1 rounded-lg bg-amber-400 px-2.5 py-2 font-bold text-black cursor-pointer"
+                          >
+                            <Printer className="h-3.5 w-3.5" /> Slip
+                          </button>
+                        </div>
+                        {order.order_status === 'out_for_delivery' && (
+                          <div className="w-full max-w-xs space-y-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-2">
+                            <p className="text-[10px] text-amber-200">
+                              Enter the 6-digit delivery OTP shared by the customer/courier.
+                            </p>
+                            <div className="flex gap-2">
+                              <input
+                                inputMode="numeric"
+                                autoComplete="one-time-code"
+                                maxLength={6}
+                                aria-label={`Delivery OTP for ${order.order_number}`}
+                                value={deliveryCodes[order.id] || ''}
+                                onChange={(event) =>
+                                  setDeliveryCodes((current) => ({
+                                    ...current,
+                                    [order.id]: event.target.value.replace(/\D/g, '').slice(0, 6)
+                                  }))
+                                }
+                                className="min-w-0 flex-1 rounded-md border border-white/15 bg-[#101827] px-2 py-1.5 text-xs tracking-[0.3em] text-white"
+                                placeholder="6-digit OTP"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => void confirmDelivery(order)}
+                                disabled={updatingOrderId === order.id || (deliveryCodes[order.id] || '').length !== 6}
+                                className="rounded-md bg-emerald-500 px-2.5 py-1.5 text-[10px] font-bold text-black disabled:opacity-40 cursor-pointer"
+                              >
+                                Verify & deliver
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </article>
+                ))}
+                {!data?.orders.length && <p className="py-4 text-center text-xs text-gray-500">No orders have been saved yet.</p>}
+              </div>
+            </section>
 
             <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
               <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-amber-300">Product activity (consenting visitors)</h4>
@@ -390,129 +584,6 @@ export const AdminDashboardModal: React.FC = () => {
                     )}
                   </tbody>
                 </table>
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-amber-300">Orders and shipping</h4>
-                <button onClick={exportOrders} className="flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-2 text-xs text-amber-200">
-                  <Download className="h-3.5 w-3.5" /> Export CSV
-                </button>
-              </div>
-              <div className="space-y-3">
-                {(data?.orders || []).map((order) => (
-                  <article key={order.id} className="rounded-xl border border-white/10 bg-black/30 p-3 text-xs">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="font-bold text-white">
-                          {order.order_number} · {order.customer_name}
-                        </p>
-                        <p className="mt-1 text-gray-300">
-                          {order.phone}
-                          {order.email ? ` · ${order.email}` : ''}
-                        </p>
-                        <p className="mt-1 text-gray-400">
-                          {order.shipping_address.line1}, {order.shipping_address.city}, {order.shipping_address.state} -{' '}
-                          {order.shipping_address.pincode}
-                        </p>
-                        <p className="mt-2 text-gray-300">
-                          {order.items.map((item) => `${item.productName} (${item.selectedSize}) × ${item.quantity}`).join(' · ')}
-                        </p>
-                        <p className="mt-1 font-bold text-amber-200">
-                          ₹{order.total.toLocaleString('en-IN')} · {order.payment_method.toUpperCase()} /{' '}
-                          {order.payment_status.toUpperCase()}
-                        </p>
-                      </div>
-                      <div className="flex flex-col items-end gap-2">
-                        <div className="flex items-center gap-2">
-                          <select
-                            aria-label={`Status for ${order.order_number}`}
-                            value={order.order_status}
-                            disabled={updatingOrderId === order.id}
-                            onChange={(event) => void updateStatus(order, event.target.value)}
-                            className="rounded-lg border border-white/20 bg-[#101827] p-2 text-xs text-white disabled:opacity-50"
-                          >
-                            {orderStatuses
-                              .filter((status) => status !== 'delivered' || order.order_status === 'delivered')
-                              .map((status) => (
-                                <option key={status} value={status}>
-                                  {status.replaceAll('_', ' ')}
-                                </option>
-                              ))}
-                          </select>
-                          <button
-                            onClick={() => setPrintingOrder(order)}
-                            className="flex items-center gap-1 rounded-lg bg-amber-400 px-2.5 py-2 font-bold text-black"
-                          >
-                            <Printer className="h-3.5 w-3.5" /> Slip
-                          </button>
-                        </div>
-                        {order.order_status === 'out_for_delivery' && (
-                          <div className="w-full max-w-xs space-y-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-2">
-                            <p className="text-[10px] text-amber-200">
-                              Enter the 6-digit delivery OTP shared by the customer/courier.
-                            </p>
-                            <div className="flex gap-2">
-                              <input
-                                inputMode="numeric"
-                                autoComplete="one-time-code"
-                                maxLength={6}
-                                aria-label={`Delivery OTP for ${order.order_number}`}
-                                value={deliveryCodes[order.id] || ''}
-                                onChange={(event) =>
-                                  setDeliveryCodes((current) => ({
-                                    ...current,
-                                    [order.id]: event.target.value.replace(/\D/g, '').slice(0, 6)
-                                  }))
-                                }
-                                className="min-w-0 flex-1 rounded-md border border-white/15 bg-[#101827] px-2 py-1.5 text-xs tracking-[0.3em] text-white"
-                                placeholder="6-digit OTP"
-                              />
-                              <button
-                                onClick={() => void confirmDelivery(order)}
-                                disabled={updatingOrderId === order.id || (deliveryCodes[order.id] || '').length !== 6}
-                                className="rounded-md bg-emerald-500 px-2.5 py-1.5 text-[10px] font-bold text-black disabled:opacity-40"
-                              >
-                                Verify & deliver
-                              </button>
-                            </div>
-                            <button
-                              onClick={() => void updateStatus(order, 'out_for_delivery')}
-                              disabled={updatingOrderId === order.id}
-                              className="text-[10px] text-amber-200 underline disabled:opacity-40"
-                            >
-                              Resend delivery OTP
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </article>
-                ))}
-                {!data?.orders.length && <p className="py-4 text-center text-xs text-gray-500">No orders have been saved yet.</p>}
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-              <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-amber-300">
-                Recent consented visitor activity
-              </h4>
-              <div className="space-y-2">
-                {(data?.events || []).slice(0, 30).map((event) => (
-                  <div key={event.id} className="flex flex-wrap justify-between gap-2 border-b border-white/5 py-2 text-xs">
-                    <span className="text-gray-200">
-                      {event.event_type.replaceAll('_', ' ')}
-                      {event.product_id ? ` · ${event.product_id}` : ` · ${event.page_path}`}
-                    </span>
-                    <span className="font-mono text-gray-500">
-                      {event.visitor_id.slice(0, 8)}… · {new Date(event.created_at).toLocaleString()}
-                    </span>
-                  </div>
-                ))}
-                {!data?.events.length && (
-                  <p className="text-xs text-gray-500">No visitors have accepted analytics consent yet.</p>
-                )}
               </div>
             </section>
           </div>
