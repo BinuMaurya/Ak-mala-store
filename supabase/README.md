@@ -19,7 +19,9 @@ media in Supabase. The browser never receives the server-only secret key.
    SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLISHABLE_KEY
    SUPABASE_SECRET_KEY=YOUR_SERVER_ONLY_SECRET_KEY
    ADMIN_EMAILS=owner@example.com
-   ADMIN_ACCESS_CODE=YOUR_STRONG_SERVER_ONLY_ADMIN_CODE
+git add .
+git commit -m "Update server.ts admin and payment routes"
+git push origin main   ADMIN_ACCESS_CODE=YOUR_STRONG_SERVER_ONLY_ADMIN_CODE
    ```
 
    The Vite build uses `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` for browser
