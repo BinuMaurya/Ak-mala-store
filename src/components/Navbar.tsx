@@ -353,16 +353,15 @@ export const Navbar: React.FC = () => {
               <span>1,000+ Gallery</span>
             </button>
 
-            {isOwner && (
-              <>
-                <button
-                  onClick={() => setIsDashboardOpen(true)}
-                  className="hover:text-[#E5C158] transition-colors cursor-pointer flex items-center gap-1 text-emerald-400"
-                >
-                  <BarChart3 className="w-3.5 h-3.5" />
-                  <span>{t('navDashboard')}</span>
-                </button>
+            <button
+              onClick={() => setIsDashboardOpen(true)}
+              className="hover:text-[#E5C158] transition-colors cursor-pointer flex items-center gap-1 text-emerald-400"
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              <span>Seller Dashboard</span>
+            </button>
 
+            {isOwner && (
                 <button
                   onClick={() => setIsAdminOpen(true)}
                   className="px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-400/50 hover:bg-amber-500/25 text-[#E5C158] font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
@@ -371,7 +370,6 @@ export const Navbar: React.FC = () => {
                   <Settings className="w-3.5 h-3.5" />
                   <span>Admin Studio</span>
                 </button>
-              </>
             )}
           </div>
 
@@ -432,27 +430,25 @@ export const Navbar: React.FC = () => {
             >
               ✨ {t('navCustomMala')}
             </button>
+            <button
+              onClick={() => {
+                setIsDashboardOpen(true);
+                setMobileMenuOpen(false);
+              }}
+              className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-left text-emerald-400"
+            >
+              📊 Seller Dashboard
+            </button>
             {isOwner && (
-              <>
-                <button
-                  onClick={() => {
-                    setIsAdminOpen(true);
-                    setMobileMenuOpen(false);
-                  }}
-                  className="p-2.5 rounded-xl bg-amber-500/15 border border-amber-400/50 text-left text-[#E5C158] font-bold"
-                >
-                  ⚙️ Admin Studio
-                </button>
-                <button
-                  onClick={() => {
-                    setIsDashboardOpen(true);
-                    setMobileMenuOpen(false);
-                  }}
-                  className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-left text-emerald-400"
-                >
-                  📊 {t('navDashboard')}
-                </button>
-              </>
+              <button
+                onClick={() => {
+                  setIsAdminOpen(true);
+                  setMobileMenuOpen(false);
+                }}
+                className="p-2.5 rounded-xl bg-amber-500/15 border border-amber-400/50 text-left text-[#E5C158] font-bold"
+              >
+                ⚙️ Admin Studio
+              </button>
             )}
           </div>
         </div>

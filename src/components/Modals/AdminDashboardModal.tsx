@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { supabase } from '../../services/supabase';
+import { SellerMediaStudio } from '../Admin/SellerMediaStudio';
 import {
   Activity,
   Download,
+  Film,
+  Image,
   KeyRound,
   LogOut,
   MessageCircle,
@@ -49,9 +51,6 @@ interface DashboardData {
 
 const orderStatuses = ['confirmed', 'packed', 'shipped', 'out_for_delivery', 'delivered'] as const;
 const ADMIN_SESSION_STORAGE_KEY = 'ak_mala_admin_token';
-const FALLBACK_ADMIN_CODE = String(
-  (import.meta.env as Record<string, string | undefined>).VITE_ADMIN_CODE || ''
-).trim();
 function escapeCsv(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
 }
@@ -96,7 +95,13 @@ function buildWhatsAppMessage(order: DashboardOrder, stage: 'confirm' | 'shipped
 }
 
 export const AdminDashboardModal: React.FC = () => {
-  const { isDashboardOpen, setIsDashboardOpen, showNotification, allProducts } = useApp();
+  const {
+    isDashboardOpen,
+    setIsDashboardOpen,
+    showNotification,
+    allProducts,
+    setAdminAccessToken
+  } = useApp();
   const [adminCode, setAdminCode] = useState('');
   const [adminToken, setAdminToken] = useState<string | null>(() => {
     try {
@@ -108,6 +113,7 @@ export const AdminDashboardModal: React.FC = () => {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'orders' | 'media'>('orders');
   const [printingOrder, setPrintingOrder] = useState<DashboardOrder | null>(null);
   const [deliveryCodes, setDeliveryCodes] = useState<Record<string, string>>({});
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
@@ -218,18 +224,7 @@ export const AdminDashboardModal: React.FC = () => {
           // ignore storage error
         }
         setAdminToken(tokenValue);
-        setAdminCode('');
-        showNotification('Admin panel unlocked.');
-        return;
-      }
-
-      if (FALLBACK_ADMIN_CODE && cleanedCode === FALLBACK_ADMIN_CODE) {
-        try {
-          window.sessionStorage.setItem(ADMIN_SESSION_STORAGE_KEY, cleanedCode);
-        } catch {
-          // ignore storage error
-        }
-        setAdminToken(cleanedCode);
+        setAdminAccessToken(tokenValue);
         setAdminCode('');
         showNotification('Admin panel unlocked.');
         return;
@@ -251,9 +246,9 @@ export const AdminDashboardModal: React.FC = () => {
       // ignore storage error
     }
     setAdminToken(null);
+    setAdminAccessToken(null);
     setData(null);
     setError('');
-    void supabase?.auth.signOut();
   };
 
   const openOrderOnWhatsApp = (order: DashboardOrder, stage: 'confirm' | 'shipped' | 'delivered') => {
@@ -354,8 +349,8 @@ export const AdminDashboardModal: React.FC = () => {
       <div className="relative my-auto flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border-2 border-[#D4AF37]/50 bg-[#080d19] shadow-2xl">
         <header className="flex items-center justify-between border-b border-white/10 bg-[#060a14] p-4 sm:p-5">
           <div>
-            <h3 className="font-cinzel text-base font-bold text-white">Owner Dashboard</h3>
-            <p className="mt-1 text-[11px] text-gray-400">Admin code se unlock karein aur orders WhatsApp se manage karein</p>
+            <h3 className="font-cinzel text-base font-bold text-white">Seller Dashboard</h3>
+            <p className="mt-1 text-[11px] text-gray-400">Admin code se orders aur store media manage karein</p>
           </div>
           <div className="flex items-center gap-2">
             {isUnlocked && (
@@ -370,6 +365,8 @@ export const AdminDashboardModal: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsDashboardOpen(false)}
+              aria-label="Close seller dashboard"
+              title="Close"
               className="rounded-lg bg-white/5 p-1.5 text-gray-400 hover:text-white cursor-pointer"
             >
               <X className="h-5 w-5" />
@@ -403,12 +400,42 @@ export const AdminDashboardModal: React.FC = () => {
             </form>
             {error && <p role="alert" className="text-center text-xs text-red-300">{error}</p>}
           </div>
-        ) : loading ? (
-          <div className="p-10 text-center text-sm text-amber-200">Loading owner data…</div>
-        ) : error ? (
-          <div className="p-10 text-center text-sm text-red-300">{error}</div>
         ) : (
-          <div className="flex-1 space-y-5 overflow-y-auto p-4 sm:p-6">
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div role="tablist" aria-label="Seller dashboard sections" className="flex gap-2 border-b border-white/10 bg-black/30 p-3">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'orders'}
+                onClick={() => setActiveTab('orders')}
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${
+                  activeTab === 'orders' ? 'bg-amber-400 text-black' : 'bg-white/5 text-gray-300'
+                }`}
+              >
+                <ShoppingBag className="h-4 w-4" /> Orders & WhatsApp
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'media'}
+                onClick={() => setActiveTab('media')}
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${
+                  activeTab === 'media' ? 'bg-amber-400 text-black' : 'bg-white/5 text-gray-300'
+                }`}
+              >
+                <Image className="h-4 w-4" /> Add Image / Video
+                <Film className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+              {activeTab === 'media' && adminToken ? (
+                <SellerMediaStudio adminToken={adminToken} />
+              ) : loading ? (
+                <div className="p-10 text-center text-sm text-amber-200">Loading orders and analytics…</div>
+              ) : error ? (
+                <div role="alert" className="p-10 text-center text-sm text-red-300">{error}</div>
+              ) : (
+                <div className="space-y-5">
             <p className="text-[10px] text-gray-500">Totals reflect up to the latest 2,000 consented events and 500 orders.</p>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-7">
               {[
@@ -586,6 +613,9 @@ export const AdminDashboardModal: React.FC = () => {
                 </table>
               </div>
             </section>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

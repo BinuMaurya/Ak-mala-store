@@ -27,3 +27,33 @@ export async function uploadStoreMedia(file: File): Promise<string> {
 
   return data.publicUrl;
 }
+
+export async function uploadStoreMediaWithAdminToken(file: File, adminToken: string): Promise<string> {
+  const prepareResponse = await fetch('/api/admin/media/upload-url', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${adminToken}`
+    },
+    body: JSON.stringify({ contentType: file.type, size: file.size })
+  });
+  const uploadDetails = (await prepareResponse.json()) as {
+    uploadUrl?: string;
+    publicUrl?: string;
+    error?: string;
+  };
+  if (!prepareResponse.ok || !uploadDetails.uploadUrl || !uploadDetails.publicUrl) {
+    throw new Error(uploadDetails.error || 'Could not prepare media upload.');
+  }
+
+  const uploadResponse = await fetch(uploadDetails.uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': file.type },
+    body: file
+  });
+  if (!uploadResponse.ok) {
+    throw new Error('Media upload failed. Please try again.');
+  }
+
+  return uploadDetails.publicUrl;
+}

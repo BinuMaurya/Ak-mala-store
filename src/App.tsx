@@ -76,25 +76,22 @@ const DevotionalFallback: React.FC<{ label?: string }> = ({ label = 'Loading Sac
 );
 
 const MainContent: React.FC = () => {
-  const { notification, isOwner, setIsDashboardOpen } = useApp();
+  const { notification, setIsDashboardOpen } = useApp();
   const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-[#030712] text-gray-100 flex flex-col font-sans selection:bg-[#D4AF37]/30 selection:text-[#E5C158] relative">
       
-      {/* Owner Analytics Dashboard */}
-      {isOwner && (
-        <div className="fixed bottom-20 lg:bottom-6 right-4 z-40">
-          <button
-            onClick={() => setIsDashboardOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/85 text-xs font-bold text-[#E5C158] hover:bg-white/10 transition-all border border-amber-500/30 cursor-pointer"
-            title="View store orders and consented analytics"
-          >
-            <BarChart3 className="w-3.5 h-3.5" />
-            <span>Owner Dashboard</span>
-          </button>
-        </div>
-      )}
+      <div className="fixed bottom-20 lg:bottom-6 right-4 z-40">
+        <button
+          onClick={() => setIsDashboardOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/85 text-xs font-bold text-[#E5C158] hover:bg-white/10 transition-all border border-amber-500/30 cursor-pointer"
+          title="Unlock the seller dashboard with your admin code"
+        >
+          <BarChart3 className="w-3.5 h-3.5" />
+          <span>Seller Dashboard</span>
+        </button>
+      </div>
 
       {/* Global Toast Notification */}
       {notification && (

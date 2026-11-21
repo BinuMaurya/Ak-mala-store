@@ -136,6 +136,8 @@ interface AppContextType {
   setIsAdminOpen: (open: boolean) => void;
   isOwner: boolean;
   isOwnerChecking: boolean;
+  adminAccessToken: string | null;
+  setAdminAccessToken: (token: string | null) => void;
   isGalleryOpen: boolean;
   setIsGalleryOpen: (open: boolean) => void;
 
@@ -216,6 +218,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
   const [isOwnerChecking, setIsOwnerChecking] = useState(false);
+  const [adminAccessToken, setAdminAccessToken] = useState<string | null>(() => {
+    try {
+      return window.sessionStorage.getItem('ak_mala_admin_token');
+    } catch {
+      return null;
+    }
+  });
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
 
   // User & Orders
@@ -293,17 +302,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [storeContentReady, isOwner, showNotification]);
 
   useEffect(() => {
-    if (!storeContentReady || !isOwner) return;
+    if (!storeContentReady || (!isOwner && !adminAccessToken)) return;
     const content: StoreContent = { products: allProducts, siteAssets, galleryItems, videosList };
     const timeout = window.setTimeout(() => {
       storeContentSaveQueue.current = storeContentSaveQueue.current
         .catch(() => undefined)
         .then(async () => {
-          if (!supabase) throw new Error('Supabase owner sign-in is not configured.');
-          const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-          if (sessionError) throw sessionError;
-          const accessToken = sessionData.session?.access_token;
-          if (!accessToken) throw new Error('Owner sign-in expired. Sign in again to publish changes.');
+          let accessToken = adminAccessToken;
+          if (!accessToken && isOwner) {
+            if (!supabase) throw new Error('Supabase owner sign-in is not configured.');
+            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+            if (sessionError) throw sessionError;
+            accessToken = sessionData.session?.access_token || null;
+          }
+          if (!accessToken) throw new Error('Admin access expired. Unlock again to publish changes.');
 
           const response = await fetch('/api/admin/content', {
             method: 'PUT',
@@ -323,7 +335,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
     }, 700);
     return () => window.clearTimeout(timeout);
-  }, [storeContentReady, isOwner, allProducts, siteAssets, galleryItems, videosList, showNotification]);
+  }, [storeContentReady, isOwner, adminAccessToken, allProducts, siteAssets, galleryItems, videosList, showNotification]);
 
   useEffect(() => {
     localStorage.setItem('ak_mala_cart', JSON.stringify(cart));
@@ -745,6 +757,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsAdminOpen,
         isOwner,
         isOwnerChecking,
+        adminAccessToken,
+        setAdminAccessToken,
         isGalleryOpen,
         setIsGalleryOpen,
         user,
