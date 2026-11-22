@@ -215,8 +215,16 @@ export const AdminDashboardModal: React.FC = () => {
         body: JSON.stringify({ code: cleanedCode })
       });
 
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        if (response.status === 404 || response.status === 405) {
+          throw new Error('Admin API route deploy nahi hui hai. Vercel par latest code deploy karein.');
+        }
+        throw new Error('Server se valid response nahi mila. Vercel deployment check karein.');
+      }
+
+      const result = (await response.json()) as { token?: string; ok?: boolean; error?: string };
       if (response.ok) {
-        const result = (await response.json()) as { token?: string; ok?: boolean };
         const tokenValue = result.token || cleanedCode;
         try {
           window.sessionStorage.setItem(ADMIN_SESSION_STORAGE_KEY, tokenValue);
@@ -230,8 +238,7 @@ export const AdminDashboardModal: React.FC = () => {
         return;
       }
 
-      const errData = (await response.json().catch(() => ({}))) as { error?: string };
-      throw new Error(errData.error || 'Galat admin code.');
+      throw new Error(result.error || 'Galat admin code.');
     } catch (unlockError) {
       setError(unlockError instanceof Error ? unlockError.message : 'Admin panel unlock nahi ho paya.');
     } finally {
