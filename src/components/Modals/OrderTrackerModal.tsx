@@ -23,6 +23,7 @@ export const OrderTrackerModal: React.FC = () => {
     isTrackerOpen,
     setIsTrackerOpen,
     orders,
+    customerOrders,
     activeTrackingId,
     setActiveTrackingId
   } = useApp();
@@ -40,8 +41,16 @@ export const OrderTrackerModal: React.FC = () => {
     if (savedOrder?.phone) {
       setPhone(savedOrder.phone);
       setTrackingPhone(savedOrder.phone);
+      return;
     }
-  }, [activeTrackingId, orders]);
+    const accountOrder = customerOrders.find(
+      (order) => order.orderNumber.toLowerCase() === activeTrackingId.toLowerCase()
+    );
+    if (accountOrder?.phone) {
+      setPhone(accountOrder.phone);
+      setTrackingPhone(accountOrder.phone);
+    }
+  }, [activeTrackingId, orders, customerOrders]);
 
   useEffect(() => {
     if (!isTrackerOpen || !activeTrackingId || !trackingPhone.trim()) return;

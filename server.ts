@@ -18,6 +18,7 @@ const maxCartItems = 50;
 
 class GatewayError extends Error {}
 class ReviewVerificationError extends Error {}
+class CustomerAuthError extends Error {}
 
 interface CartLineInput {
   productId: string;
@@ -50,6 +51,7 @@ interface RazorpayPayment {
 
 interface ShippingAddress {
   line1: string;
+  line2?: string;
   city: string;
   state: string;
   pincode: string;
@@ -64,6 +66,7 @@ interface CheckoutCustomer {
 
 interface StoredOrder {
   id: string;
+  customer_user_id: string | null;
   order_number: string;
   razorpay_order_id: string | null;
   visitor_id: string | null;
@@ -220,6 +223,25 @@ async function requireAdmin(request: Request): Promise<void> {
   }
 }
 
+
+async function getCustomerUserId(request: Request, optional = false): Promise<string | null> {
+  const authorization = request.headers.authorization;
+  if (!authorization?.startsWith('Bearer ')) {
+    if (optional) return null;
+    throw new CustomerAuthError('Sign in to access your customer account.');
+  }
+  const { url, anonKey } = getSupabaseCredentials();
+  const response = await fetch(`${url}/auth/v1/user`, {
+    headers: { apikey: anonKey, Authorization: authorization }
+  });
+  if (!response.ok) throw new CustomerAuthError('Your customer sign-in has expired. Please sign in again.');
+  const authenticatedUser = (await response.json()) as { id?: string };
+  if (!authenticatedUser.id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(authenticatedUser.id)) {
+    throw new CustomerAuthError('The signed-in customer account is invalid.');
+  }
+  return authenticatedUser.id;
+}
+
 // ==================== RAZORPAY HELPERS ====================
 function getRazorpayCredentials() {
   const keyId = process.env.RAZORPAY_KEY_ID;
@@ -300,6 +322,7 @@ function parseCheckoutCustomer(input: unknown): CheckoutCustomer {
   const phone = customer.phone;
   const email = customer.email;
   const line1 = shippingAddress.line1;
+  const line2 = shippingAddress.line2;
   const city = shippingAddress.city;
   const state = shippingAddress.state;
   const pincode = shippingAddress.pincode;
@@ -307,6 +330,7 @@ function parseCheckoutCustomer(input: unknown): CheckoutCustomer {
     typeof name !== 'string' || !name.trim() || name.length > 120 ||
     typeof phone !== 'string' || !/^\+?\d[\d\s()-]{8,}\d$/.test(phone) ||
     typeof line1 !== 'string' || !line1.trim() || line1.length > 300 ||
+    (line2 !== undefined && (typeof line2 !== 'string' || line2.length > 200)) ||
     typeof city !== 'string' || !city.trim() || city.length > 100 ||
     typeof state !== 'string' || !state.trim() || state.length > 100 ||
     typeof pincode !== 'string' || !/^\d{6}$/.test(pincode)
@@ -317,7 +341,13 @@ function parseCheckoutCustomer(input: unknown): CheckoutCustomer {
     name: name.trim(),
     phone: phone.trim(),
     email: typeof email === 'string' ? email.trim() : null,
-    address: { line1: line1.trim(), city: city.trim(), state: state.trim(), pincode }
+    address: {
+      line1: line1.trim(),
+      ...(typeof line2 === 'string' && line2.trim() ? { line2: line2.trim() } : {}),
+      city: city.trim(),
+      state: state.trim(),
+      pincode
+    }
   };
 }
 
@@ -360,9 +390,33 @@ function isOfferConfigActive(offer: OfferConfig): boolean {
   return offer.enabled && (!offer.startDate || today >= offer.startDate) && (!offer.endDate || today <= offer.endDate);
 }
 
-async function createPaymentQuote(cartLines: CartLineInput[], couponCode: unknown): Promise<PaymentQuote> {
+async function getProductCatalog(): Promise<StoreContent['products']> {
+  const rows = await supabaseRequest<Array<{ content: StoreContent }>>(
+    'store_content?id=eq.main&select=content',
+    'GET'
+  );
+  const storedProducts = rows[0]?.content?.products;
+  return Array.isArray(storedProducts) ? storedProducts : products;
+}
+
+async function createPaymentQuote(
+  cartLines: CartLineInput[],
+  couponCode: unknown,
+  catalog: StoreContent['products']
+): Promise<PaymentQuote> {
+  const requestedQuantity = new Map<string, number>();
+  for (const line of cartLines) {
+    requestedQuantity.set(line.productId, (requestedQuantity.get(line.productId) || 0) + line.quantity);
+  }
+  for (const [productId, quantity] of requestedQuantity) {
+    const product = catalog.find((candidate) => candidate.id === productId);
+    if (!product || !product.inStock || (typeof product.stockQuantity === 'number' && quantity > product.stockQuantity)) {
+      throw new Error('A cart item is unavailable or the requested quantity exceeds current stock.');
+    }
+  }
+
   const subtotal = cartLines.reduce((total, line) => {
-    const product = products.find((candidate) => candidate.id === line.productId);
+    const product = catalog.find((candidate) => candidate.id === line.productId);
     if (!product || !product.inStock) {
       throw new Error('A cart item is unavailable for payment.');
     }
@@ -393,8 +447,10 @@ async function createStoredOrderFields(
   cartLines: CartLineInput[],
   customer: CheckoutCustomer,
   couponCode: unknown,
-  visitorId: string | null
+  visitorId: string | null,
+  customerUserId: string | null
 ): Promise<{
+  customer_user_id: string | null;
   visitor_id: string | null;
   customer_name: string;
   phone: string;
@@ -406,9 +462,10 @@ async function createStoredOrderFields(
   delivery_charge: number;
   total: number;
 }> {
-  const quote = await createPaymentQuote(cartLines, couponCode);
+  const catalog = await getProductCatalog();
+  const quote = await createPaymentQuote(cartLines, couponCode, catalog);
   const items = cartLines.map((line) => {
-    const product = products.find((candidate) => candidate.id === line.productId);
+    const product = catalog.find((candidate) => candidate.id === line.productId);
     const size = product?.availableSizes.find((option) => option.size === line.selectedSize);
     if (!product || !size) throw new Error('A cart item is unavailable.');
     return {
@@ -420,6 +477,7 @@ async function createStoredOrderFields(
     };
   });
   return {
+    customer_user_id: customerUserId,
     visitor_id: visitorId,
     customer_name: customer.name,
     phone: customer.phone,
@@ -877,6 +935,177 @@ app.post('/api/admin/media/upload-url', async (request: Request, response: Respo
 });
 
 // ==================== PAYMENTS & ORDERS ====================
+app.get('/api/customer/account', async (request: Request, response: Response) => {
+  try {
+    const userId = await getCustomerUserId(request);
+    if (!userId) throw new CustomerAuthError('Sign in to access your customer account.');
+    const encodedUserId = encodeURIComponent(userId);
+    const [addresses, orders] = await Promise.all([
+      supabaseRequest<Array<{
+        id: string;
+        label: string;
+        recipient_name: string;
+        phone: string;
+        line1: string;
+        line2: string | null;
+        city: string;
+        state: string;
+        pincode: string;
+        is_default: boolean;
+      }>>(
+        `customer_addresses?user_id=eq.${encodedUserId}&select=id,label,recipient_name,phone,line1,line2,city,state,pincode,is_default&order=is_default.desc,created_at.desc`,
+        'GET'
+      ),
+      supabaseRequest<StoredOrder[]>(
+        `orders?customer_user_id=eq.${encodedUserId}&select=id,order_number,customer_name,phone,created_at,items,subtotal,discount,delivery_charge,total,payment_method,payment_status,order_status,shipping_address&order=created_at.desc&limit=100`,
+        'GET'
+      )
+    ]);
+
+    response.json({
+      addresses: addresses.map((address) => ({
+        id: address.id,
+        label: address.label,
+        recipientName: address.recipient_name,
+        phone: address.phone,
+        line1: address.line1,
+        line2: address.line2 || '',
+        city: address.city,
+        state: address.state,
+        pincode: address.pincode,
+        isDefault: address.is_default
+      })),
+      orders: orders.map((order) => ({
+        id: order.id,
+        orderNumber: order.order_number,
+        customerName: order.customer_name,
+        createdAt: order.created_at,
+        items: order.items,
+        subtotal: order.subtotal,
+        discount: order.discount,
+        deliveryCharge: order.delivery_charge,
+        total: order.total,
+        paymentMethod: order.payment_method,
+        paymentStatus: order.payment_status,
+        orderStatus: order.order_status,
+        phone: order.phone,
+        address: order.shipping_address
+      }))
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Customer account could not be loaded.';
+    response.status(error instanceof CustomerAuthError ? 401 : 502).json({ error: message });
+  }
+});
+
+app.put('/api/customer/addresses', async (request: Request, response: Response) => {
+  try {
+    const userId = await getCustomerUserId(request);
+    if (!userId) throw new CustomerAuthError('Sign in to save a delivery address.');
+    const body = getRequestBody(request);
+    const text = (value: unknown, maxLength: number): string =>
+      typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
+    const label = text(body.label, 32) || 'Home';
+    const recipientName = text(body.recipientName, 100);
+    const phone = text(body.phone, 24);
+    const line1 = text(body.line1, 200);
+    const line2 = text(body.line2, 200);
+    const city = text(body.city, 100);
+    const state = text(body.state, 100);
+    const pincode = text(body.pincode, 6);
+    const isDefault = body.isDefault === true;
+    const id = body.id;
+    if (
+      !recipientName ||
+      phone.replace(/\D/g, '').length < 10 ||
+      !line1 ||
+      !city ||
+      !state ||
+      !/^\d{6}$/.test(pincode) ||
+      (id !== undefined && (typeof id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)))
+    ) {
+      response.status(400).json({ error: 'Enter a name, valid phone number, complete address, and 6-digit PIN code.' });
+      return;
+    }
+
+    const encodedUserId = encodeURIComponent(userId);
+    if (typeof id === 'string') {
+      const ownedAddress = await supabaseRequest<Array<{ id: string }>>(
+        `customer_addresses?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodedUserId}&select=id`,
+        'GET'
+      );
+      if (!ownedAddress.length) {
+        response.status(404).json({ error: 'Delivery address not found.' });
+        return;
+      }
+    }
+    if (isDefault) {
+      await supabaseRequest(
+        `customer_addresses?user_id=eq.${encodedUserId}&is_default=eq.true`,
+        'PATCH',
+        { is_default: false }
+      );
+    }
+    const address = {
+      user_id: userId,
+      label,
+      recipient_name: recipientName,
+      phone,
+      line1,
+      line2: line2 || null,
+      city,
+      state,
+      pincode,
+      is_default: isDefault
+    };
+
+    if (typeof id === 'string') {
+      const updated = await supabaseRequest<Array<{ id: string }>>(
+        `customer_addresses?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodedUserId}&select=id`,
+        'PATCH',
+        address,
+        'return=representation'
+      );
+      if (!updated.length) {
+        response.status(404).json({ error: 'Delivery address not found.' });
+        return;
+      }
+    } else {
+      await supabaseRequest('customer_addresses', 'POST', [address]);
+    }
+    response.status(200).json({ saved: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Delivery address could not be saved.';
+    response.status(error instanceof CustomerAuthError ? 401 : 502).json({ error: message });
+  }
+});
+
+app.delete('/api/customer/addresses/:id', async (request: Request, response: Response) => {
+  try {
+    const userId = await getCustomerUserId(request);
+    if (!userId) throw new CustomerAuthError('Sign in to remove a delivery address.');
+    const id = request.params.id;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+      response.status(400).json({ error: 'Delivery address ID is invalid.' });
+      return;
+    }
+    const removed = await supabaseRequest<Array<{ id: string }>>(
+      `customer_addresses?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(userId)}&select=id`,
+      'DELETE',
+      undefined,
+      'return=representation'
+    );
+    if (!removed.length) {
+      response.status(404).json({ error: 'Delivery address not found.' });
+      return;
+    }
+    response.json({ removed: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Delivery address could not be removed.';
+    response.status(error instanceof CustomerAuthError ? 401 : 502).json({ error: message });
+  }
+});
+
 app.post('/api/payments/create-order', async (request: Request, response: Response) => {
   try {
     getSupabaseCredentials();
@@ -888,7 +1117,8 @@ app.post('/api/payments/create-order', async (request: Request, response: Respon
     if (!['upi', 'card', 'netbanking', 'wallet'].includes(paymentMethod as string)) {
       throw new Error('Choose a supported payment method.');
     }
-    const orderFields = await createStoredOrderFields(cartLines, customer, body.couponCode, visitorId);
+    const customerUserId = await getCustomerUserId(request, true);
+    const orderFields = await createStoredOrderFields(cartLines, customer, body.couponCode, visitorId, customerUserId);
     const order = await razorpayRequest<RazorpayOrder>('/orders', 'POST', {
       amount: orderFields.total * 100,
       currency: 'INR',
@@ -986,7 +1216,8 @@ app.post('/api/orders/upi-qr', async (request: Request, response: Response) => {
       return;
     }
 
-    const orderFields = await createStoredOrderFields(cartLines, customer, body.couponCode, visitorId);
+    const customerUserId = await getCustomerUserId(request, true);
+    const orderFields = await createStoredOrderFields(cartLines, customer, body.couponCode, visitorId, customerUserId);
     const [order] = await supabaseRequest<StoredOrder[]>(
       'orders',
       'POST',
@@ -1013,7 +1244,8 @@ app.post('/api/orders/cod', async (request: Request, response: Response) => {
     const cartLines = parseCartLines(body.cart);
     const customer = parseCheckoutCustomer(body.customer);
     const visitorId = parseVisitorId(body.visitorId);
-    const orderFields = await createStoredOrderFields(cartLines, customer, body.couponCode, visitorId);
+    const customerUserId = await getCustomerUserId(request, true);
+    const orderFields = await createStoredOrderFields(cartLines, customer, body.couponCode, visitorId, customerUserId);
     const [order] = await supabaseRequest<StoredOrder[]>(
       'orders',
       'POST',

@@ -10,7 +10,10 @@ import {
   SiteAssetsConfig,
   StoreContent,
   Review,
-  ProductReviewSummary
+  ProductReviewSummary,
+  CustomerAddress,
+  CustomerOrder,
+  CustomerUser
 } from '../types';
 import { products } from '../data/products';
 import { translations } from '../data/translations';
@@ -144,6 +147,12 @@ interface AppContextType {
   reviews: Review[];
   reviewSummaries: ProductReviewSummary[];
   refreshReviews: () => Promise<void>;
+  customerAddresses: CustomerAddress[];
+  customerOrders: CustomerOrder[];
+  isCustomerAccountLoading: boolean;
+  refreshCustomerAccount: () => Promise<void>;
+  saveCustomerAddress: (address: Omit<CustomerAddress, 'id'> & { id?: string }) => Promise<void>;
+  deleteCustomerAddress: (id: string) => Promise<void>;
   isAdminOpen: boolean;
   setIsAdminOpen: (open: boolean) => void;
   isOwner: boolean;
@@ -154,8 +163,8 @@ interface AppContextType {
   setIsGalleryOpen: (open: boolean) => void;
 
   // User & Orders
-  user: { name: string; phone: string; email?: string } | null;
-  setUser: (u: { name: string; phone: string; email?: string } | null) => void;
+  user: CustomerUser | null;
+  setUser: (u: CustomerUser | null) => void;
   orders: Order[];
   placeOrder: (orderDetails: Omit<Order, 'id' | 'createdAt' | 'trackingNumber'>, orderId?: string) => Order;
   activeTrackingId: string;
@@ -243,19 +252,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
 
   // User & Orders
-  const [user, setUser] = useState<{ name: string; phone: string; email?: string } | null>(() => {
+  const [user, setUser] = useState<CustomerUser | null>(() => {
     try {
       const saved = localStorage.getItem('ak_mala_user');
-      const storedUser = saved ? (JSON.parse(saved) as { email?: string }) : null;
+      const storedUser = saved ? (JSON.parse(saved) as Partial<CustomerUser>) : null;
       if (storedUser?.email?.endsWith('@example.com')) {
         localStorage.removeItem('ak_mala_user');
         return null;
       }
-      return storedUser as { name: string; phone: string; email?: string } | null;
+      return storedUser && typeof storedUser.id === 'string' && typeof storedUser.name === 'string'
+        ? {
+            id: storedUser.id,
+            name: storedUser.name,
+            phone: typeof storedUser.phone === 'string' ? storedUser.phone : '',
+            email: storedUser.email
+          }
+        : null;
     } catch {
       return null;
     }
   });
+  const [customerAddresses, setCustomerAddresses] = useState<CustomerAddress[]>([]);
+  const [customerOrders, setCustomerOrders] = useState<CustomerOrder[]>([]);
+  const [isCustomerAccountLoading, setIsCustomerAccountLoading] = useState(false);
 
   const [orders, setOrders] = useState<Order[]>(() => {
     try {
@@ -291,11 +310,92 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setReviewSummaries(result.summaries);
   }, []);
 
+  const refreshCustomerAccount = React.useCallback(async () => {
+    if (!supabase) throw new Error('Customer account sign-in is not configured.');
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    const accessToken = data.session?.access_token;
+    if (!accessToken) {
+      setCustomerAddresses([]);
+      setCustomerOrders([]);
+      return;
+    }
+
+    setIsCustomerAccountLoading(true);
+    try {
+      const response = await fetch('/api/customer/account', {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const result = await response.json() as {
+        addresses?: CustomerAddress[];
+        orders?: CustomerOrder[];
+        error?: string;
+      };
+      if (!response.ok || !Array.isArray(result.addresses) || !Array.isArray(result.orders)) {
+        throw new Error(result.error || 'Customer account details could not be loaded.');
+      }
+      setCustomerAddresses(result.addresses);
+      setCustomerOrders(result.orders);
+    } finally {
+      setIsCustomerAccountLoading(false);
+    }
+  }, []);
+
+  const saveCustomerAddress = React.useCallback(async (
+    address: Omit<CustomerAddress, 'id'> & { id?: string }
+  ) => {
+    if (!supabase) throw new Error('Customer account sign-in is not configured.');
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    const accessToken = data.session?.access_token;
+    if (!accessToken) throw new Error('Sign in to save a delivery address.');
+
+    const response = await fetch('/api/customer/addresses', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`
+      },
+      body: JSON.stringify(address)
+    });
+    const result = await response.json() as { error?: string };
+    if (!response.ok) throw new Error(result.error || 'Delivery address could not be saved.');
+    await refreshCustomerAccount();
+  }, [refreshCustomerAccount]);
+
+  const deleteCustomerAddress = React.useCallback(async (id: string) => {
+    if (!supabase) throw new Error('Customer account sign-in is not configured.');
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    const accessToken = data.session?.access_token;
+    if (!accessToken) throw new Error('Sign in to remove a delivery address.');
+
+    const response = await fetch(`/api/customer/addresses/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    const result = await response.json() as { error?: string };
+    if (!response.ok) throw new Error(result.error || 'Delivery address could not be removed.');
+    await refreshCustomerAccount();
+  }, [refreshCustomerAccount]);
+
   useEffect(() => {
     void refreshReviews().catch((error: unknown) => {
       console.error('Could not load customer reviews:', error);
     });
   }, [refreshReviews]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setCustomerAddresses([]);
+      setCustomerOrders([]);
+      setIsCustomerAccountLoading(false);
+      return;
+    }
+    void refreshCustomerAccount().catch((error: unknown) => {
+      console.error('Could not load customer account:', error);
+    });
+  }, [user?.id, refreshCustomerAccount]);
 
   useEffect(() => {
     if (storeContentReady) return;
@@ -407,8 +507,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       setUser({
+        id: session.user.id,
         name: session.user.user_metadata?.full_name || session.user.email || 'AK MALA Customer',
-        phone: '',
+        phone: session.user.phone || '',
         email: session.user.email
       });
       setIsOwner(false);
@@ -813,6 +914,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         reviews,
         reviewSummaries,
         refreshReviews,
+        customerAddresses,
+        customerOrders,
+        isCustomerAccountLoading,
+        refreshCustomerAccount,
+        saveCustomerAddress,
+        deleteCustomerAddress,
         isAdminOpen,
         setIsAdminOpen,
         isOwner,

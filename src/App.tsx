@@ -76,7 +76,7 @@ const DevotionalFallback: React.FC<{ label?: string }> = ({ label = 'Loading Sac
 );
 
 const MainContent: React.FC = () => {
-  const { notification, setIsDashboardOpen } = useApp();
+  const { notification, setIsDashboardOpen, setIsAuthOpen } = useApp();
   const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
 
   return (
@@ -170,7 +170,7 @@ const MainContent: React.FC = () => {
         <CheckoutModal />
         <OrderTrackerModal />
         <OrderHistoryModal isOpen={orderHistoryOpen} onClose={() => setOrderHistoryOpen(false)} />
-        <AuthOtpModal />
+        <AuthOtpModal onOpenOrders={() => { setIsAuthOpen(false); setOrderHistoryOpen(true); }} />
         <AdminDashboardModal />
         <ReviewModal />
       </Suspense>

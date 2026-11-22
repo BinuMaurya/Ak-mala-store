@@ -36,7 +36,8 @@ import {
   AlertCircle,
   Star,
   Check,
-  XCircle
+  XCircle,
+  PackageCheck
 } from 'lucide-react';
 
 export const AdminPanelModal: React.FC = () => {
@@ -198,6 +199,7 @@ export const AdminPanelModal: React.FC = () => {
     ],
     freshnessHours: 72,
     inStock: true,
+    stockQuantity: 10,
     fragranceLevel: 'Divine Sacred',
     bestForDeity: 'Ganpati Bappa'
   });
@@ -346,8 +348,15 @@ export const AdminPanelModal: React.FC = () => {
   const handleCreateProduct = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProd.name || !newProd.price) return;
+    const stockQuantity = Number(newProd.stockQuantity ?? 0);
+    if (!Number.isSafeInteger(stockQuantity) || stockQuantity < 0) {
+      showNotification('Stock quantity must be a whole number equal to or above zero.');
+      return;
+    }
     const finalProduct: Product = {
       ...newProd,
+      stockQuantity,
+      inStock: stockQuantity > 0,
       id: `mala-${Date.now()}`
     } as Product;
     addProduct(finalProduct);
@@ -825,7 +834,7 @@ export const AdminPanelModal: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div>
                       <label className="text-gray-300 font-bold block mb-1">Selling Price (₹):</label>
                       <input
@@ -859,6 +868,18 @@ export const AdminPanelModal: React.FC = () => {
                         <option value="temple">Grand Temple (36")</option>
                         <option value="wedding">Varmala Pair</option>
                       </select>
+                    </div>
+                    <div>
+                      <label className="text-gray-300 font-bold block mb-1">Stock quantity:</label>
+                      <input
+                        type="number"
+                        required
+                        min={0}
+                        step={1}
+                        value={newProd.stockQuantity ?? 0}
+                        onChange={(e) => setNewProd({ ...newProd, stockQuantity: Number(e.target.value) })}
+                        className="w-full p-2.5 rounded-xl bg-black/60 border border-white/20 text-white"
+                      />
                     </div>
                   </div>
 
@@ -907,6 +928,48 @@ export const AdminPanelModal: React.FC = () => {
                         <span>Gallery Pick</span>
                       </button>
                     </div>
+                    <label className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-[11px] font-bold text-emerald-200">
+                      <Upload className="h-3.5 w-3.5" /> Upload primary product photo
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handleLocalFileUpload(e, (url) => setNewProd({ ...newProd, image: url }))}
+                      />
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="text-gray-300 font-bold block mb-1">Product description:</label>
+                    <textarea
+                      required
+                      rows={3}
+                      value={newProd.description || ''}
+                      onChange={(e) => setNewProd({ ...newProd, description: e.target.value })}
+                      className="w-full p-2.5 rounded-xl bg-black/60 border border-white/20 text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-gray-300 font-bold block mb-1">Product video URL (optional):</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="url"
+                        value={newProd.videoUrl || ''}
+                        onChange={(e) => setNewProd({ ...newProd, videoUrl: e.target.value })}
+                        placeholder="https://..."
+                        className="min-w-0 flex-1 p-2.5 rounded-xl bg-black/60 border border-white/20 text-white font-mono text-xs"
+                      />
+                      <label className="px-3 py-2 rounded-xl bg-white/10 border border-white/20 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer whitespace-nowrap">
+                        <Upload className="w-3.5 h-3.5" /> Upload video
+                        <input
+                          type="file"
+                          accept="video/*"
+                          className="hidden"
+                          onChange={(e) => handleLocalFileUpload(e, (url) => setNewProd({ ...newProd, videoUrl: url }))}
+                        />
+                      </label>
+                    </div>
                   </div>
 
                   <button
@@ -931,6 +994,9 @@ export const AdminPanelModal: React.FC = () => {
                         <h5 className="font-bold text-white truncate">{p.name}</h5>
                         <p className="text-[10px] text-amber-300/80 font-devanagari">{p.hindiName}</p>
                         <span className="text-[10px] text-gray-400 capitalize">{p.category} mala</span>
+                        <span className={`ml-2 text-[10px] ${p.inStock && (p.stockQuantity === undefined || p.stockQuantity > 0) ? 'text-emerald-300' : 'text-red-300'}`}>
+                          Stock: {p.stockQuantity ?? (p.inStock ? 'Available' : 0)}
+                        </span>
                       </div>
                     </div>
 
@@ -952,6 +1018,46 @@ export const AdminPanelModal: React.FC = () => {
                         title="Edit Price"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const currentStock = p.stockQuantity === undefined ? '' : String(p.stockQuantity);
+                          const stockInput = prompt(`Enter stock quantity for "${p.name}":`, String(currentStock));
+                          if (stockInput === null) return;
+                          if (!stockInput.trim()) {
+                            showNotification('Enter a stock quantity. Use 0 to mark the product out of stock.');
+                            return;
+                          }
+                          const stockQuantity = Number(stockInput);
+                          if (!Number.isSafeInteger(stockQuantity) || stockQuantity < 0) {
+                            showNotification('Stock quantity must be a whole number equal to or above zero.');
+                            return;
+                          }
+                          updateProduct(p.id, { stockQuantity, inStock: stockQuantity > 0 });
+                        }}
+                        className="rounded-lg bg-white/5 p-2 text-emerald-300 hover:bg-white/10"
+                        title="Update inventory quantity"
+                      >
+                        <PackageCheck className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const videoUrl = prompt(`Product video URL for "${p.name}" (leave blank to remove):`, p.videoUrl || '');
+                          if (videoUrl === null) return;
+                          const trimmedUrl = videoUrl.trim();
+                          if (trimmedUrl && !/^https?:\/\//i.test(trimmedUrl)) {
+                            showNotification('Enter an http or https video URL.');
+                            return;
+                          }
+                          updateProduct(p.id, { videoUrl: trimmedUrl || undefined });
+                        }}
+                        className="rounded-lg bg-white/5 p-2 text-purple-300 hover:bg-white/10"
+                        title="Edit product video URL"
+                      >
+                        <Film className="h-3.5 w-3.5" />
                       </button>
 
                       {/* Pick Image from Sacred Gallery button */}

@@ -85,6 +85,15 @@ export const ProductDetailModal: React.FC = () => {
   const isWish = isInWishlist(product.id);
   const reviewSummary = reviewSummaries.find((summary) => summary.productId === product.id);
   const averageRating = reviewSummary?.reviewCount ? reviewSummary.averageRating.toFixed(1) : null;
+  const isProductAvailable = product.inStock && (product.stockQuantity === undefined || product.stockQuantity > 0);
+  const productVideoUrl = (() => {
+    try {
+      const parsed = new URL(product.videoUrl || '');
+      return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.href : '';
+    } catch {
+      return '';
+    }
+  })();
 
   const handleCopyCoupon = () => {
     const applied = applyCoupon(siteAssets.offerCode);
@@ -104,6 +113,10 @@ export const ProductDetailModal: React.FC = () => {
   };
 
   const handleInstantBuy = () => {
+    if (!isProductAvailable) {
+      showNotification('This product is currently out of stock.');
+      return;
+    }
     addToCart(product, selectedSize);
     setSelectedProductForDetail(null);
     setIsCheckoutOpen(true);
@@ -185,6 +198,18 @@ export const ProductDetailModal: React.FC = () => {
               ))}
             </div>
 
+            {productVideoUrl && (
+              <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/40">
+                {/\.(mp4|webm|ogg)(\?|#|$)/i.test(productVideoUrl) ? (
+                  <video src={productVideoUrl} controls preload="metadata" className="max-h-72 w-full" aria-label={`${product.name} product video`} />
+                ) : (
+                  <a href={productVideoUrl} target="_blank" rel="noreferrer" className="block p-3 text-center text-xs font-bold text-amber-200 hover:bg-white/5">
+                    Watch product video
+                  </a>
+                )}
+              </div>
+            )}
+
             {/* 4 Feature Badges from PDP screenshot */}
             <div className="grid grid-cols-2 gap-2 pt-2">
               {[
@@ -232,6 +257,13 @@ export const ProductDetailModal: React.FC = () => {
                   Read or write a review
                 </button>
               </div>
+              <p className={`mt-2 text-xs font-semibold ${isProductAvailable ? 'text-emerald-300' : 'text-red-300'}`}>
+                {isProductAvailable
+                  ? product.stockQuantity === undefined
+                    ? 'In stock'
+                    : `${product.stockQuantity} available`
+                  : 'Currently out of stock'}
+              </p>
             </div>
 
             {productReviews.slice(0, 2).map((review) => (
@@ -389,10 +421,15 @@ export const ProductDetailModal: React.FC = () => {
             <div className="grid grid-cols-2 gap-3 pt-3 border-t border-white/10">
               <button
                 onClick={() => {
+                  if (!isProductAvailable) {
+                    showNotification('This product is currently out of stock.');
+                    return;
+                  }
                   addToCart(product, selectedSize);
                   setIsCartOpen(true);
                 }}
-                className="py-3 rounded-2xl bg-white/10 hover:bg-white/15 border border-[#D4AF37]/50 text-[#F3E5AB] font-extrabold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
+                disabled={!isProductAvailable}
+                className="py-3 rounded-2xl bg-white/10 hover:bg-white/15 border border-[#D4AF37]/50 text-[#F3E5AB] font-extrabold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <ShoppingBag className="w-4 h-4" />
                 <span>ADD TO CART</span>
@@ -400,7 +437,8 @@ export const ProductDetailModal: React.FC = () => {
 
               <button
                 onClick={handleInstantBuy}
-                className="py-3 rounded-2xl bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black font-black text-xs uppercase tracking-wider shadow-lg hover:opacity-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                disabled={!isProductAvailable}
+                className="py-3 rounded-2xl bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black font-black text-xs uppercase tracking-wider shadow-lg hover:opacity-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Zap className="w-4 h-4 fill-black" />
                 <span>BUY NOW</span>

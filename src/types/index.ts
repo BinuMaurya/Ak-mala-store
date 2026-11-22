@@ -22,6 +22,8 @@ export interface Product {
   }[];
   freshnessHours: number;
   inStock: boolean;
+  stockQuantity?: number;
+  videoUrl?: string;
   fragranceLevel: 'Subtle' | 'High' | 'Divine Sacred';
   bestForDeity: string;
 }
@@ -72,6 +74,55 @@ export interface ProductReviewSummary {
   productId: string;
   averageRating: number;
   reviewCount: number;
+}
+
+export interface CustomerAddress {
+  id: string;
+  label: string;
+  recipientName: string;
+  phone: string;
+  line1: string;
+  line2?: string;
+  city: string;
+  state: string;
+  pincode: string;
+  isDefault: boolean;
+}
+
+export interface CustomerOrder {
+  id: string;
+  orderNumber: string;
+  customerName: string;
+  createdAt: string;
+  items: Array<{
+    productId: string;
+    productName: string;
+    selectedSize: string;
+    quantity: number;
+    pricePerUnit: number;
+  }>;
+  subtotal: number;
+  discount: number;
+  deliveryCharge: number;
+  total: number;
+  paymentMethod: string;
+  paymentStatus: string;
+  orderStatus: string;
+  phone: string;
+  address: {
+    line1: string;
+    line2?: string;
+    city: string;
+    state: string;
+    pincode: string;
+  };
+}
+
+export interface CustomerUser {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
 }
 
 export interface Order {

@@ -50,6 +50,7 @@ export const BestSellers: React.FC = () => {
   };
 
   const handleAddToCart = (product: Product) => {
+    if (!product.inStock || (product.stockQuantity !== undefined && product.stockQuantity <= 0)) return;
     const chosenSize = activeSizeMap[product.id] || product.availableSizes[0]?.size || '22"';
     addToCart(product, chosenSize);
     setAddedItemAnimation(product.id);
@@ -107,6 +108,7 @@ export const BestSellers: React.FC = () => {
             const calculatedOriginal = product.originalPrice + (sizeObj?.extraPrice || 0);
             const isWish = isInWishlist(product.id);
             const isJustAdded = addedItemAnimation === product.id;
+            const isAvailable = product.inStock && (product.stockQuantity === undefined || product.stockQuantity > 0);
 
             return (
               <div
@@ -201,6 +203,9 @@ export const BestSellers: React.FC = () => {
                       <span>Select Garland Size:</span>
                       <span className="text-amber-300 font-medium">{chosenSize}</span>
                     </div>
+                    <p className={`mb-1 text-[10px] font-semibold ${isAvailable ? 'text-emerald-300' : 'text-red-300'}`}>
+                      {isAvailable ? product.stockQuantity === undefined ? 'In stock' : `${product.stockQuantity} available` : 'Out of stock'}
+                    </p>
                     <div className="flex items-center gap-1.5">
                       {product.availableSizes.map((s) => (
                         <button
@@ -236,7 +241,8 @@ export const BestSellers: React.FC = () => {
 
                     <button
                       onClick={() => handleAddToCart(product)}
-                      className={`w-full py-2.5 rounded-xl font-bold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                      disabled={!isAvailable}
+                      className={`w-full py-2.5 rounded-xl font-bold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
                         isJustAdded
                           ? 'bg-emerald-600 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)]'
                           : 'bg-gradient-to-r from-[#D4AF37] via-[#E5C158] to-[#B8860B] text-black hover:opacity-95 shadow-[0_4px_15px_rgba(212,175,55,0.3)] hover:shadow-[0_6px_20px_rgba(212,175,55,0.5)]'

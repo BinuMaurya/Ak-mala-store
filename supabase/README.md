@@ -7,10 +7,12 @@ media in Supabase. The browser never receives the server-only secret key.
 
 1. Create a Supabase project and run `schema.sql` in its SQL Editor. Then run
    `migrations/20261115_shared_store_content.sql` to create the shared catalog
-   table and public media bucket, and `migrations/20261122_reviews.sql` to
-   enable verified customer reviews. For an existing project, also run
-   `migrations/20261111_delivery_otp.sql` before using delivery confirmation.
-2. In Authentication, enable email OTP/magic-link sign-in. Add the deployed
+   table and public media bucket, `migrations/20261122_reviews.sql` to enable
+   verified customer reviews, and `migrations/20261122_customer_accounts.sql`
+   to enable saved addresses and account-linked orders. For an existing project,
+   also run `migrations/20261111_delivery_otp.sql` before using delivery confirmation.
+2. In Authentication, enable email OTP/magic-link and phone sign-in. Configure
+   an SMS provider under Authentication > SMS Provider, and add the deployed
    website URL to the allowed redirect URLs. Add the owner's verified email
    under Authentication > Users; owner sign-in does not allow public account creation.
 3. Create a local `.env` file (it is ignored by Git) with:
@@ -20,9 +22,7 @@ media in Supabase. The browser never receives the server-only secret key.
    SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLISHABLE_KEY
    SUPABASE_SECRET_KEY=YOUR_SERVER_ONLY_SECRET_KEY
    ADMIN_EMAILS=owner@example.com
-git add .
-git commit -m "Update server.ts admin and payment routes"
-git push origin main   ADMIN_ACCESS_CODE=YOUR_STRONG_SERVER_ONLY_ADMIN_CODE
+   ADMIN_ACCESS_CODE=YOUR_STRONG_SERVER_ONLY_ADMIN_CODE
    ```
 
    The Vite build uses `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` for browser
@@ -42,6 +42,14 @@ git push origin main   ADMIN_ACCESS_CODE=YOUR_STRONG_SERVER_ONLY_ADMIN_CODE
    most five verification attempts. The owner enters the code provided by the
    customer/courier to confirm delivery. Never expose Twilio credentials in
    browser code or share them in chat.
+   These delivery-notification credentials are separate from the SMS provider
+   configured for customer phone sign-in.
+
+Email and phone sign-in create Supabase customer identities. Customers can add
+and verify the second contact method from their account to keep both sign-in
+methods connected to the same account. Existing separate accounts are not
+automatically merged; a contact already registered on another account must be
+resolved by the store owner before it can be linked.
 
 ## Run checkout locally
 

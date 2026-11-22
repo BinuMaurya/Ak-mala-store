@@ -58,6 +58,7 @@ interface StartRazorpayCheckoutOptions {
     address: { line1: string; city: string; state: string; pincode: string };
   };
   visitorId: string | null;
+  accessToken?: string;
 }
 
 function loadRazorpayScript(): Promise<void> {
@@ -84,10 +85,13 @@ function loadRazorpayScript(): Promise<void> {
   });
 }
 
-async function postJson<T>(url: string, data: unknown): Promise<T> {
+async function postJson<T>(url: string, data: unknown, accessToken?: string): Promise<T> {
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+    },
     body: JSON.stringify(data)
   });
   const result = (await response.json()) as T & { error?: string };
@@ -103,7 +107,8 @@ export async function startRazorpayCheckout({
   expectedTotal,
   method,
   customer,
-  visitorId
+  visitorId,
+  accessToken
 }: StartRazorpayCheckoutOptions): Promise<RazorpayCheckoutResult> {
   const order = await postJson<{
     keyId: string;
@@ -121,7 +126,7 @@ export async function startRazorpayCheckout({
     customer,
     visitorId,
     paymentMethod: method
-  });
+  }, accessToken);
 
   if (order.quote.total !== expectedTotal) {
     throw new Error(

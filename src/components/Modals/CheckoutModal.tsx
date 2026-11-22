@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { supabase } from '../../services/supabase';
 import confetti from 'canvas-confetti';
 import { startRazorpayCheckout } from '../../services/razorpay';
 import { getConsentedVisitorId } from '../../services/analytics';
@@ -25,6 +26,8 @@ export const CheckoutModal: React.FC = () => {
     deliveryCharge,
     finalTotal,
     user,
+    customerAddresses,
+    refreshCustomerAccount,
     placeOrder,
     setIsTrackerOpen,
     showNotification
@@ -33,15 +36,44 @@ export const CheckoutModal: React.FC = () => {
   const [step, setStep] = useState<'address' | 'payment'>('address');
   const [paymentMethod, setPaymentMethod] = useState<'upi' | 'card' | 'netbanking' | 'wallets' | 'cod'>('upi');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [selectedAddressId, setSelectedAddressId] = useState('');
   const [address, setAddress] = useState({
-    name: '',
-    phone: '',
+    name: user?.name || '',
+    phone: user?.phone || '',
     email: user?.email || '',
     line1: '',
+    line2: '',
     city: '',
     state: '',
     pincode: ''
   });
+
+  useEffect(() => {
+    if (!isCheckoutOpen) return;
+    const savedAddress = customerAddresses.find((item) => item.isDefault) || customerAddresses[0];
+    if (savedAddress) {
+      setSelectedAddressId(savedAddress.id);
+      setAddress((current) => ({
+        ...current,
+        name: savedAddress.recipientName,
+        phone: savedAddress.phone,
+        line1: savedAddress.line1,
+        line2: savedAddress.line2 || '',
+        city: savedAddress.city,
+        state: savedAddress.state,
+        pincode: savedAddress.pincode,
+        email: user?.email || current.email
+      }));
+      return;
+    }
+    setSelectedAddressId('');
+    setAddress((current) => ({
+      ...current,
+      name: user?.name || current.name,
+      phone: user?.phone || current.phone,
+      email: user?.email || current.email
+    }));
+  }, [isCheckoutOpen, user?.id, user?.name, user?.phone, user?.email, customerAddresses]);
 
   if (!isCheckoutOpen) return null;
 
@@ -79,12 +111,21 @@ export const CheckoutModal: React.FC = () => {
         email: address.email.trim() || null,
         address: {
           line1: address.line1.trim(),
+          line2: address.line2.trim(),
           city: address.city.trim(),
           state: address.state.trim(),
           pincode: address.pincode.trim()
         }
       };
       const visitorId = getConsentedVisitorId();
+      let accessToken: string | undefined;
+      if (user) {
+        if (!supabase) throw new Error('Your account session is unavailable. Sign in again before placing this order.');
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+        accessToken = sessionData.session?.access_token;
+        if (!accessToken) throw new Error('Your account session has expired. Sign in again before placing this order.');
+      }
       let quote = { subtotal, discount, deliveryCharge, total: finalTotal };
       let orderNumber: string;
       let verifiedPaymentMethod: 'upi' | 'card' | 'netbanking' | 'wallet' | 'cod';
@@ -93,7 +134,10 @@ export const CheckoutModal: React.FC = () => {
       if (paymentMethod === 'cod') {
         const response = await fetch('/api/orders/cod', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+          },
           body: JSON.stringify({
             cart: cart.map(({ productId, selectedSize, quantity }) => ({
               productId,
@@ -131,7 +175,8 @@ export const CheckoutModal: React.FC = () => {
             ...customer,
             email: customer.email || ''
           },
-          visitorId
+          visitorId,
+          accessToken
         });
         quote = payment.quote;
         orderNumber = payment.orderNumber;
@@ -159,6 +204,14 @@ export const CheckoutModal: React.FC = () => {
         estimatedDelivery: 'Get it by 20 May - 22 May (Express Cold-Chain)'
       }, orderNumber);
 
+      if (user) {
+        try {
+          await refreshCustomerAccount();
+        } catch (accountError) {
+          console.error('Order placed but account history could not be refreshed:', accountError);
+          showNotification('Order placed, but account history could not refresh. Reopen your account to retry.');
+        }
+      }
       setIsCheckoutOpen(false);
       setIsTrackerOpen(true);
       showNotification(
@@ -243,6 +296,37 @@ export const CheckoutModal: React.FC = () => {
                 <span className="text-[11px] text-gray-400">Total: ₹{finalTotal}</span>
               </div>
 
+              {customerAddresses.length > 0 && (
+                <select
+                  value={selectedAddressId}
+                  onChange={(event) => {
+                    const selected = customerAddresses.find((item) => item.id === event.target.value);
+                    setSelectedAddressId(event.target.value);
+                    if (selected) {
+                      setAddress({
+                        ...address,
+                        name: selected.recipientName,
+                        phone: selected.phone,
+                        line1: selected.line1,
+                        line2: selected.line2 || '',
+                        city: selected.city,
+                        state: selected.state,
+                        pincode: selected.pincode
+                      });
+                    }
+                  }}
+                  className="w-full rounded-lg border border-amber-400/30 bg-black/50 p-2.5 text-xs text-white"
+                  aria-label="Choose a saved address"
+                >
+                  <option value="">Enter a new address</option>
+                  {customerAddresses.map((savedAddress) => (
+                    <option key={savedAddress.id} value={savedAddress.id}>
+                      {savedAddress.label}{savedAddress.isDefault ? ' (Default)' : ''} — {savedAddress.city}, {savedAddress.pincode}
+                    </option>
+                  ))}
+                </select>
+              )}
+
               <input
                 type="text"
                 value={address.name}
@@ -270,6 +354,13 @@ export const CheckoutModal: React.FC = () => {
                 value={address.line1}
                 onChange={(e) => setAddress({ ...address, line1: e.target.value })}
                 placeholder="House No., Street, Area / Landmark *"
+                className="w-full p-2.5 rounded-lg bg-black/50 border border-white/20 text-xs text-white"
+              />
+              <input
+                type="text"
+                value={address.line2}
+                onChange={(e) => setAddress({ ...address, line2: e.target.value })}
+                placeholder="Landmark / Address line 2 (optional)"
                 className="w-full p-2.5 rounded-lg bg-black/50 border border-white/20 text-xs text-white"
               />
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -307,7 +398,7 @@ export const CheckoutModal: React.FC = () => {
                   </p>
                   <p className="font-bold text-white">{address.name} ({address.phone})</p>
                   <p className="text-gray-400">
-                    {address.line1}, {address.city}, {address.state} - {address.pincode}
+                    {address.line1}{address.line2 ? `, ${address.line2}` : ''}, {address.city}, {address.state} - {address.pincode}
                   </p>
                 </div>
                 <button
