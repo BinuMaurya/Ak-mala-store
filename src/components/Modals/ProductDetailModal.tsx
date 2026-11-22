@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { speakProductHindi } from '../VoiceShoppingGuide';
 import {
   X,
   Star,
@@ -18,7 +19,8 @@ import {
   ShieldCheck,
   Flower2,
   HeartHandshake,
-  Award
+  Award,
+  Volume2
 } from 'lucide-react';
 
 export const ProductDetailModal: React.FC = () => {
@@ -190,6 +192,15 @@ export const ProductDetailModal: React.FC = () => {
                 <span className="text-emerald-400 font-semibold">200+ Sold</span>
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={() => speakProductHindi(product.name, product.hindiDescription || product.description, calculatedPrice)}
+              className="mt-3 inline-flex items-center gap-2 rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-400/20 transition-colors"
+            >
+              <Volume2 className="w-4 h-4" />
+              सुनिए इस माला के बारे में
+            </button>
 
             {/* Price Box */}
             <div className="flex items-baseline gap-3 p-3.5 rounded-2xl bg-white/[0.03] border border-[#D4AF37]/30">
