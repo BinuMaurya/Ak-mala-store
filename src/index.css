@@ -131,3 +131,15 @@ body {
     color: #000;
   }
 }
+
+/* AK Mala Store: soft premium motion + trust-first visuals */
+.ak-hero-premium { isolation: isolate; background: radial-gradient(ellipse at 50% 8%, rgba(139,91,27,.16), transparent 55%); }
+.ak-hero-ambient { position:absolute; pointer-events:none; z-index:0; border-radius:9999px; filter:blur(54px); opacity:.22; animation: ak-drift 12s ease-in-out infinite alternate; }
+.ak-hero-ambient-one { width:19rem; height:19rem; top:8%; left:4%; background:rgba(218,160,62,.24); }
+.ak-hero-ambient-two { width:17rem; height:17rem; right:4%; bottom:5%; background:rgba(157,77,43,.18); animation-delay:-5s; }
+.ak-hero-stars { position:absolute; z-index:0; inset:0; pointer-events:none; opacity:.24; background-image:radial-gradient(circle,rgba(245,210,133,.8) 1px,transparent 1.7px); background-size:58px 58px; mask-image:linear-gradient(to bottom,black,transparent 82%); animation:ak-twinkle 6s ease-in-out infinite alternate; }
+.ak-hero-premium > .max-w-7xl { z-index:1; }
+.gold-card-hover:hover { transform:translateY(-4px) scale(1.01); }
+@keyframes ak-drift { from { transform:translate3d(-8px,0,0) scale(.96); } to { transform:translate3d(12px,16px,0) scale(1.05); } }
+@keyframes ak-twinkle { from { opacity:.12; } to { opacity:.3; } }
+@media (prefers-reduced-motion: reduce) { .ak-hero-ambient,.ak-hero-stars { animation:none !important; } }

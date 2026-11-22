@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import type { Review } from '../../types';
+import { speakProductHindi } from '../VoiceShoppingGuide';
 import {
   X,
   Star,
@@ -19,7 +20,8 @@ import {
   ShieldCheck,
   Flower2,
   HeartHandshake,
-  Award
+  Award,
+  Volume2
 } from 'lucide-react';
 import { isOfferActive } from '../../utils/offers';
 
@@ -60,7 +62,7 @@ export const ProductDetailModal: React.FC = () => {
     const fallbackReviews = reviews.filter((review) => review.productId === selectedProductForDetail.id);
     void fetch(`/api/reviews?productId=${encodeURIComponent(selectedProductForDetail.id)}`)
       .then(async (response) => {
-        const result = await response.json() as { reviews?: Review[]; error?: string };
+        const result = (await response.json()) as { reviews?: Review[]; error?: string };
         if (!response.ok || !Array.isArray(result.reviews)) {
           throw new Error(result.error || 'Product reviews could not be loaded.');
         }
@@ -210,7 +212,7 @@ export const ProductDetailModal: React.FC = () => {
               </div>
             )}
 
-            {/* 4 Feature Badges from PDP screenshot */}
+            {/* 4 Feature Badges */}
             <div className="grid grid-cols-2 gap-2 pt-2">
               {[
                 { title: 'Handcrafted with Love', icon: HeartHandshake },
@@ -265,6 +267,15 @@ export const ProductDetailModal: React.FC = () => {
                   : 'Currently out of stock'}
               </p>
             </div>
+
+            <button
+              type="button"
+              onClick={() => speakProductHindi(product.name, product.hindiDescription || product.description, calculatedPrice)}
+              className="inline-flex items-center gap-2 rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-400/20 transition-colors cursor-pointer"
+            >
+              <Volume2 className="w-4 h-4" />
+              सुनिए इस माला के बारे में
+            </button>
 
             {productReviews.slice(0, 2).map((review) => (
               <article key={review.id} className="p-3 rounded-xl bg-white/[0.03] border border-white/10">
@@ -332,7 +343,7 @@ export const ProductDetailModal: React.FC = () => {
                 className="w-full p-3.5 bg-white/[0.02] flex items-center justify-between text-xs font-bold text-gray-200 hover:text-white cursor-pointer"
               >
                 <span>PRODUCT DETAILS</span>
-                {isDetailsOpen ? <ChevronUp className="w-4 h-4 text-amber-400" /> : <ChevronDown className="w-4 h-4" />}
+                {isDetailsOpen ? <ChevronUp className="w-4 h-4 text-amber-400" /> : <ChevronDown className="w-4 h-4 text-amber-400" />}
               </button>
 
               {isDetailsOpen && (

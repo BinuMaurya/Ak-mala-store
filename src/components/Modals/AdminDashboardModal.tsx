@@ -1,16 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { SellerMediaStudio } from '../Admin/SellerMediaStudio';
+import { supabase } from '../../services/supabase';
+import type { MediaItem, StoreContent, VideoItem } from '../../types';
 import {
   Activity,
   Download,
   Film,
-  Image,
+  ImagePlus,
   KeyRound,
   LogOut,
   MessageCircle,
   Package,
   Printer,
+  Save,
   ShoppingBag,
   Users,
   X
@@ -50,7 +52,18 @@ interface DashboardData {
 }
 
 const orderStatuses = ['confirmed', 'packed', 'shipped', 'out_for_delivery', 'delivered'] as const;
+const galleryCategories: MediaItem['category'][] = [
+  'ganpati_darshan',
+  'customer_photos',
+  'temple_events',
+  'artisan_handcraft',
+  'varmala_wedding'
+];
 const ADMIN_SESSION_STORAGE_KEY = 'ak_mala_admin_token';
+const FALLBACK_ADMIN_CODE = String(
+  (import.meta.env as Record<string, string | undefined>).VITE_ADMIN_CODE || ''
+).trim();
+
 function escapeCsv(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
 }
@@ -95,13 +108,22 @@ function buildWhatsAppMessage(order: DashboardOrder, stage: 'confirm' | 'shipped
 }
 
 export const AdminDashboardModal: React.FC = () => {
+  const appContext = useApp();
   const {
     isDashboardOpen,
     setIsDashboardOpen,
     showNotification,
     allProducts,
-    setAdminAccessToken
-  } = useApp();
+    siteAssets,
+    galleryItems,
+    videosList
+  } = appContext;
+
+  const setStoreContentFn = (
+    appContext as unknown as { updateStoreContent?: (next: StoreContent) => void }
+  ).updateStoreContent;
+
+  const [activeTab, setActiveTab] = useState<'orders' | 'media'>('orders');
   const [adminCode, setAdminCode] = useState('');
   const [adminToken, setAdminToken] = useState<string | null>(() => {
     try {
@@ -113,10 +135,22 @@ export const AdminDashboardModal: React.FC = () => {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'orders' | 'media'>('orders');
   const [printingOrder, setPrintingOrder] = useState<DashboardOrder | null>(null);
   const [deliveryCodes, setDeliveryCodes] = useState<Record<string, string>>({});
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+
+  // Seller Media Studio states (aligned with MediaItem & VideoItem)
+  const [targetCollection, setTargetCollection] = useState<'gallery' | 'video'>('gallery');
+  const [mediaKind, setMediaKind] = useState<'image' | 'video'>('image');
+  const [mediaCategory, setMediaCategory] = useState<MediaItem['category']>('artisan_handcraft');
+  const [mediaTitle, setMediaTitle] = useState('');
+  const [mediaTagsText, setMediaTagsText] = useState('mala, handmade, ak mala');
+  const [videoDuration, setVideoDuration] = useState('0:30');
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [uploadedUrl, setUploadedUrl] = useState('');
+  const [thumbnailUrl, setThumbnailUrl] = useState('');
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [savingContent, setSavingContent] = useState(false);
 
   const isUnlocked = Boolean(adminToken);
 
@@ -215,30 +249,34 @@ export const AdminDashboardModal: React.FC = () => {
         body: JSON.stringify({ code: cleanedCode })
       });
 
-      const contentType = response.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        if (response.status === 404 || response.status === 405) {
-          throw new Error('Admin API route deploy nahi hui hai. Vercel par latest code deploy karein.');
-        }
-        throw new Error('Server se valid response nahi mila. Vercel deployment check karein.');
-      }
-
-      const result = (await response.json()) as { token?: string; ok?: boolean; error?: string };
       if (response.ok) {
+        const result = (await response.json()) as { token?: string };
         const tokenValue = result.token || cleanedCode;
         try {
           window.sessionStorage.setItem(ADMIN_SESSION_STORAGE_KEY, tokenValue);
         } catch {
-          // ignore storage error
+          // ignore
         }
         setAdminToken(tokenValue);
-        setAdminAccessToken(tokenValue);
         setAdminCode('');
-        showNotification('Admin panel unlocked.');
+        showNotification('Seller / Admin panel unlocked.');
         return;
       }
 
-      throw new Error(result.error || 'Galat admin code.');
+      if (FALLBACK_ADMIN_CODE && cleanedCode === FALLBACK_ADMIN_CODE) {
+        try {
+          window.sessionStorage.setItem(ADMIN_SESSION_STORAGE_KEY, cleanedCode);
+        } catch {
+          // ignore
+        }
+        setAdminToken(cleanedCode);
+        setAdminCode('');
+        showNotification('Seller / Admin panel unlocked.');
+        return;
+      }
+
+      const errData = (await response.json().catch(() => ({}))) as { error?: string };
+      throw new Error(errData.error || 'Galat admin code.');
     } catch (unlockError) {
       setError(unlockError instanceof Error ? unlockError.message : 'Admin panel unlock nahi ho paya.');
     } finally {
@@ -250,12 +288,141 @@ export const AdminDashboardModal: React.FC = () => {
     try {
       window.sessionStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
     } catch {
-      // ignore storage error
+      // ignore
     }
     setAdminToken(null);
-    setAdminAccessToken(null);
     setData(null);
     setError('');
+    void supabase?.auth.signOut();
+  };
+
+  const handleUploadMediaFile = async () => {
+    if (!adminToken) return;
+    if (!mediaFile) {
+      showNotification('Pehle ek image ya video file chunein.');
+      return;
+    }
+
+    setUploadingMedia(true);
+    try {
+      const signRes = await fetch('/api/admin/media/upload-url', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+          'x-admin-code': adminToken
+        },
+        body: JSON.stringify({
+          contentType: mediaFile.type,
+          size: mediaFile.size
+        })
+      });
+      const signData = (await signRes.json()) as { uploadUrl?: string; publicUrl?: string; error?: string };
+      if (!signRes.ok || !signData.uploadUrl || !signData.publicUrl) {
+        throw new Error(signData.error || 'Upload URL nahi mil paya.');
+      }
+
+      const putRes = await fetch(signData.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': mediaFile.type },
+        body: mediaFile
+      });
+      if (!putRes.ok) {
+        throw new Error('File storage par upload nahi ho payi.');
+      }
+
+      setUploadedUrl(signData.publicUrl);
+      if (mediaFile.type.startsWith('image/') && !thumbnailUrl) {
+        setThumbnailUrl(signData.publicUrl);
+      }
+      showNotification('Media upload ho gaya! Ab Save to Store par click karein.');
+    } catch (uploadErr) {
+      showNotification(uploadErr instanceof Error ? uploadErr.message : 'Upload failed.');
+    } finally {
+      setUploadingMedia(false);
+    }
+  };
+
+  const handleSaveMediaToStore = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!adminToken) return;
+    const finalUrl = uploadedUrl.trim();
+    if (!finalUrl) {
+      showNotification('Pehle file upload karein ya valid media URL daalein.');
+      return;
+    }
+
+    setSavingContent(true);
+    try {
+      const nowIso = new Date().toISOString().slice(0, 10);
+      const title = mediaTitle.trim() || (targetCollection === 'video' ? 'New Store Video' : 'New Gallery Item');
+      const parsedTags = mediaTagsText
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean);
+      const poster = thumbnailUrl.trim() || siteAssets.heroGaneshaImage || finalUrl;
+
+      let nextGallery: MediaItem[] = galleryItems || [];
+      let nextVideos: VideoItem[] = videosList || [];
+
+      if (targetCollection === 'video') {
+        const newVideo: VideoItem = {
+          id: `vid-${Date.now()}`,
+          title,
+          duration: videoDuration.trim() || '0:30',
+          image: poster,
+          videoUrl: finalUrl,
+          category: mediaCategory
+        };
+        nextVideos = [newVideo, ...nextVideos];
+      } else {
+        const newGalleryItem: MediaItem = {
+          id: `gal-${Date.now()}`,
+          title,
+          type: mediaKind,
+          url: finalUrl,
+          thumbnailUrl: poster,
+          category: mediaCategory,
+          tags: parsedTags.length ? parsedTags : ['ak mala'],
+          date: nowIso,
+          likes: 0
+        };
+        nextGallery = [newGalleryItem, ...nextGallery];
+      }
+
+      const nextContent: StoreContent = {
+        products: allProducts,
+        siteAssets,
+        galleryItems: nextGallery,
+        videosList: nextVideos
+      };
+
+      const saveRes = await fetch('/api/admin/content', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+          'x-admin-code': adminToken
+        },
+        body: JSON.stringify({ content: nextContent })
+      });
+      const saveData = (await saveRes.json()) as { error?: string };
+      if (!saveRes.ok) {
+        throw new Error(saveData.error || 'Store content save nahi ho paya.');
+      }
+
+      setStoreContentFn?.(nextContent);
+      setMediaTitle('');
+      setMediaFile(null);
+      setUploadedUrl('');
+      showNotification(
+        `${targetCollection === 'video' ? 'Video' : 'Gallery item'} save ho gaya! Store refresh karein.`
+      );
+    } catch (saveErr) {
+      showNotification(saveErr instanceof Error ? saveErr.message : 'Save failed.');
+    } finally {
+      setSavingContent(false);
+    }
   };
 
   const openOrderOnWhatsApp = (order: DashboardOrder, stage: 'confirm' | 'shipped' | 'delivered') => {
@@ -354,26 +521,46 @@ export const AdminDashboardModal: React.FC = () => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 backdrop-blur-md">
       <div className="relative my-auto flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border-2 border-[#D4AF37]/50 bg-[#080d19] shadow-2xl">
-        <header className="flex items-center justify-between border-b border-white/10 bg-[#060a14] p-4 sm:p-5">
+        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 bg-[#060a14] p-4 sm:p-5">
           <div>
-            <h3 className="font-cinzel text-base font-bold text-white">Seller Dashboard</h3>
-            <p className="mt-1 text-[11px] text-gray-400">Admin code se orders aur store media manage karein</p>
+            <h3 className="font-cinzel text-base font-bold text-white">Seller & Owner Dashboard</h3>
+            <p className="mt-1 text-[11px] text-gray-400">
+              Admin code se unlock karein · Orders WhatsApp par manage karein · Images & Videos add karein
+            </p>
           </div>
           <div className="flex items-center gap-2">
             {isUnlocked && (
-              <button
-                type="button"
-                onClick={lockAdminPanel}
-                className="flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-2 text-xs text-gray-300 hover:bg-white/5 cursor-pointer"
-              >
-                <LogOut className="h-3.5 w-3.5" /> Lock
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('orders')}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold cursor-pointer ${
+                    activeTab === 'orders' ? 'bg-amber-400 text-black' : 'border border-white/10 text-gray-300'
+                  }`}
+                >
+                  Orders & WhatsApp
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('media')}
+                  className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold cursor-pointer ${
+                    activeTab === 'media' ? 'bg-amber-400 text-black' : 'border border-white/10 text-gray-300'
+                  }`}
+                >
+                  <ImagePlus className="h-3.5 w-3.5" /> Add Image / Video
+                </button>
+                <button
+                  type="button"
+                  onClick={lockAdminPanel}
+                  className="flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1.5 text-xs text-gray-300 hover:bg-white/5 cursor-pointer"
+                >
+                  <LogOut className="h-3.5 w-3.5" /> Lock
+                </button>
+              </>
             )}
             <button
               type="button"
               onClick={() => setIsDashboardOpen(false)}
-              aria-label="Close seller dashboard"
-              title="Close"
               className="rounded-lg bg-white/5 p-1.5 text-gray-400 hover:text-white cursor-pointer"
             >
               <X className="h-5 w-5" />
@@ -385,7 +572,7 @@ export const AdminDashboardModal: React.FC = () => {
           <div className="m-auto w-full max-w-sm space-y-4 p-6">
             <KeyRound className="mx-auto h-9 w-9 text-amber-300" />
             <p className="text-center text-xs text-gray-300">
-              Apna secret <strong>Admin Code</strong> daal kar dashboard kholein.
+              Apna secret <strong>Admin Code</strong> daal kar Seller Panel kholein.
             </p>
             <form onSubmit={unlockAdminPanel} className="space-y-3">
               <input
@@ -402,47 +589,180 @@ export const AdminDashboardModal: React.FC = () => {
                 disabled={loading}
                 className="w-full rounded-xl bg-amber-400 p-3 text-sm font-bold text-black disabled:opacity-50 cursor-pointer"
               >
-                {loading ? 'Unlocking…' : 'Unlock Admin Panel'}
+                {loading ? 'Unlocking…' : 'Unlock Seller Panel'}
               </button>
             </form>
             {error && <p role="alert" className="text-center text-xs text-red-300">{error}</p>}
           </div>
-        ) : (
-          <div className="flex min-h-0 flex-1 flex-col">
-            <div role="tablist" aria-label="Seller dashboard sections" className="flex gap-2 border-b border-white/10 bg-black/30 p-3">
+        ) : activeTab === 'media' ? (
+          <div className="flex-1 space-y-5 overflow-y-auto p-4 sm:p-6">
+            <form
+              onSubmit={handleSaveMediaToStore}
+              className="space-y-4 rounded-2xl border border-amber-500/25 bg-white/[0.03] p-4 sm:p-5"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-amber-300">
+                  Seller Media Studio (Add Image / Video)
+                </h4>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTargetCollection('gallery');
+                      setMediaKind('image');
+                    }}
+                    className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold cursor-pointer ${
+                      targetCollection === 'gallery' && mediaKind === 'image'
+                        ? 'bg-amber-400 text-black'
+                        : 'bg-white/5 text-gray-300'
+                    }`}
+                  >
+                    <ImagePlus className="h-3.5 w-3.5" /> Gallery Image
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTargetCollection('gallery');
+                      setMediaKind('video');
+                    }}
+                    className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold cursor-pointer ${
+                      targetCollection === 'gallery' && mediaKind === 'video'
+                        ? 'bg-amber-400 text-black'
+                        : 'bg-white/5 text-gray-300'
+                    }`}
+                  >
+                    <Film className="h-3.5 w-3.5" /> Gallery Video
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTargetCollection('video');
+                      setMediaKind('video');
+                    }}
+                    className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold cursor-pointer ${
+                      targetCollection === 'video' ? 'bg-amber-400 text-black' : 'bg-white/5 text-gray-300'
+                    }`}
+                  >
+                    <Film className="h-3.5 w-3.5" /> Store Video
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <input
+                  type="text"
+                  value={mediaTitle}
+                  onChange={(e) => setMediaTitle(e.target.value)}
+                  placeholder="Title (e.g. Royal Rose Mala)"
+                  className="rounded-xl border border-white/15 bg-black/50 p-2.5 text-xs text-white"
+                />
+                <select
+                  value={mediaCategory}
+                  onChange={(e) => setMediaCategory(e.target.value as MediaItem['category'])}
+                  className="rounded-xl border border-white/15 bg-[#101827] p-2.5 text-xs text-white"
+                >
+                  {galleryCategories.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat.replaceAll('_', ' ')}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="file"
+                  accept={mediaKind === 'video' ? 'video/mp4,video/webm,video/quicktime' : 'image/jpeg,image/png,image/webp,image/gif'}
+                  onChange={(e) => setMediaFile(e.target.files?.[0] || null)}
+                  className="rounded-xl border border-white/15 bg-black/50 p-2 text-xs text-gray-300"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <input
+                  type="text"
+                  value={mediaTagsText}
+                  onChange={(e) => setMediaTagsText(e.target.value)}
+                  placeholder="Tags (comma separated)"
+                  className="rounded-xl border border-white/15 bg-black/50 p-2.5 text-xs text-white"
+                />
+                {targetCollection === 'video' ? (
+                  <input
+                    type="text"
+                    value={videoDuration}
+                    onChange={(e) => setVideoDuration(e.target.value)}
+                    placeholder="Duration (e.g. 0:45)"
+                    className="rounded-xl border border-white/15 bg-black/50 p-2.5 text-xs text-white"
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    value={thumbnailUrl}
+                    onChange={(e) => setThumbnailUrl(e.target.value)}
+                    placeholder="Thumbnail Image URL (optional)"
+                    className="rounded-xl border border-white/15 bg-black/50 p-2.5 text-xs text-white"
+                  />
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={uploadingMedia || !mediaFile}
+                  onClick={() => void handleUploadMediaFile()}
+                  className="rounded-xl bg-white/10 px-4 py-2 text-xs font-bold text-amber-200 hover:bg-white/15 disabled:opacity-40 cursor-pointer"
+                >
+                  {uploadingMedia ? 'Uploading…' : '1. Upload File to Storage'}
+                </button>
+                <input
+                  type="text"
+                  value={uploadedUrl}
+                  onChange={(e) => setUploadedUrl(e.target.value)}
+                  placeholder="Uploaded Media URL (ya direct URL paste karein)"
+                  className="min-w-[240px] flex-1 rounded-xl border border-white/15 bg-black/50 p-2.5 text-xs text-white"
+                />
+              </div>
+
               <button
-                type="button"
-                role="tab"
-                aria-selected={activeTab === 'orders'}
-                onClick={() => setActiveTab('orders')}
-                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${
-                  activeTab === 'orders' ? 'bg-amber-400 text-black' : 'bg-white/5 text-gray-300'
-                }`}
+                type="submit"
+                disabled={savingContent}
+                className="flex items-center gap-2 rounded-xl bg-amber-400 px-4 py-2.5 text-xs font-black text-black disabled:opacity-50 cursor-pointer"
               >
-                <ShoppingBag className="h-4 w-4" /> Orders & WhatsApp
+                <Save className="h-4 w-4" />
+                <span>{savingContent ? 'Saving…' : '2. Save to Store'}</span>
               </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeTab === 'media'}
-                onClick={() => setActiveTab('media')}
-                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${
-                  activeTab === 'media' ? 'bg-amber-400 text-black' : 'bg-white/5 text-gray-300'
-                }`}
-              >
-                <Image className="h-4 w-4" /> Add Image / Video
-                <Film className="h-3.5 w-3.5" />
-              </button>
+            </form>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+                <h5 className="mb-2 text-xs font-bold text-amber-300">
+                  Gallery Items ({galleryItems?.length || 0})
+                </h5>
+                <div className="space-y-1.5 text-xs text-gray-300">
+                  {(galleryItems || []).slice(0, 8).map((g) => (
+                    <p key={g.id} className="truncate">
+                      • [{g.type}] {g.title} — <span className="text-gray-500">{g.url}</span>
+                    </p>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+                <h5 className="mb-2 text-xs font-bold text-amber-300">
+                  Store Videos ({videosList?.length || 0})
+                </h5>
+                <div className="space-y-1.5 text-xs text-gray-300">
+                  {(videosList || []).slice(0, 8).map((v) => (
+                    <p key={v.id} className="truncate">
+                      • {v.title} ({v.duration}) — <span className="text-gray-500">{v.videoUrl || v.image}</span>
+                    </p>
+                  ))}
+                </div>
+              </div>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
-              {activeTab === 'media' && adminToken ? (
-                <SellerMediaStudio adminToken={adminToken} />
-              ) : loading ? (
-                <div className="p-10 text-center text-sm text-amber-200">Loading orders and analytics…</div>
-              ) : error ? (
-                <div role="alert" className="p-10 text-center text-sm text-red-300">{error}</div>
-              ) : (
-                <div className="space-y-5">
+          </div>
+        ) : loading ? (
+          <div className="p-10 text-center text-sm text-amber-200">Loading owner data…</div>
+        ) : error ? (
+          <div className="p-10 text-center text-sm text-red-300">{error}</div>
+        ) : (
+          <div className="flex-1 space-y-5 overflow-y-auto p-4 sm:p-6">
             <p className="text-[10px] text-gray-500">Totals reflect up to the latest 2,000 consented events and 500 orders.</p>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-7">
               {[
@@ -499,7 +819,6 @@ export const AdminDashboardModal: React.FC = () => {
                           {order.payment_status.toUpperCase()}
                         </p>
 
-                        {/* WhatsApp Quick Actions */}
                         <div className="mt-2.5 flex flex-wrap gap-2">
                           <button
                             type="button"
@@ -589,40 +908,6 @@ export const AdminDashboardModal: React.FC = () => {
                 {!data?.orders.length && <p className="py-4 text-center text-xs text-gray-500">No orders have been saved yet.</p>}
               </div>
             </section>
-
-            <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-              <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-amber-300">Product activity (consenting visitors)</h4>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="text-gray-400">
-                    <tr>
-                      <th className="py-2">Product</th>
-                      <th>Views</th>
-                      <th>Wishlist adds (net)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {metrics.productActivity.map((product) => (
-                      <tr key={product.id}>
-                        <td className="py-2 text-gray-200">{product.name}</td>
-                        <td>{product.views}</td>
-                        <td>{Math.max(0, product.netWishlist)}</td>
-                      </tr>
-                    ))}
-                    {metrics.productActivity.length === 0 && (
-                      <tr>
-                        <td colSpan={3} className="py-4 text-gray-500">
-                          No consented product activity recorded yet.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-                </div>
-              )}
-            </div>
           </div>
         )}
 

@@ -1531,6 +1531,22 @@ export const AdminPanelModal: React.FC = () => {
                     <span>Generate 1,000 Items</span>
                   </button>
 
+                  {galleryItems.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm(`Remove all ${galleryItems.length} gallery photos/videos? This cannot be undone.`)) {
+                          clearGallery();
+                        }
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-red-600/10 border border-red-500/40 text-red-300 font-bold text-xs flex items-center gap-1.5 hover:bg-red-600/20"
+                      title="Delete all gallery media"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>Remove All Photos</span>
+                    </button>
+                  )}
+
                   <button
                     onClick={() => setShowAddGallery(!showAddGallery)}
                     className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black font-extrabold text-xs uppercase flex items-center gap-1.5"
@@ -1643,13 +1659,13 @@ export const AdminPanelModal: React.FC = () => {
               <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
                 <div className="flex items-center justify-between text-[11px] text-gray-400 mb-2">
                   <span>
-                    Showing top {Math.min(galleryItems.length, 30)} of {galleryItems.length} media items:
+                    Showing all {galleryItems.length} media items:
                   </span>
                   <span className="text-amber-300">
                     Use one-click buttons to set as Murti, Product, or Video!
                   </span>
                 </div>
-                {galleryItems.slice(0, 30).map((g) => (
+                {galleryItems.map((g) => (
                   <div key={g.id} className="p-2.5 rounded-xl bg-white/[0.02] border border-white/5 hover:border-amber-500/30 flex items-center justify-between text-xs gap-3">
                     <div className="flex items-center gap-3 min-w-0">
                       <img src={g.thumbnailUrl || g.url} alt={g.title} className="w-12 h-12 rounded-lg object-cover border border-amber-500/30 shrink-0" />
