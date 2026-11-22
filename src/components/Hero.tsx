@@ -16,7 +16,11 @@ export const Hero: React.FC = () => {
   const [selectedMalaColor, setSelectedMalaColor] = useState<'rose' | 'marigold' | 'mogra' | 'orchid' | 'lotus'>('rose');
 
   return (
-    <section className="relative overflow-hidden pt-6 pb-16 lg:py-16">
+    <section className="ak-hero-premium relative overflow-hidden pt-6 pb-16 lg:py-16">
+      {/* Lightweight animated devotional ambience (no heavy 3D dependency) */}
+      <div className="ak-hero-ambient ak-hero-ambient-one" aria-hidden="true" />
+      <div className="ak-hero-ambient ak-hero-ambient-two" aria-hidden="true" />
+      <div className="ak-hero-stars" aria-hidden="true" />
       {/* Background ambient gold gradient glow */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[700px] h-[500px] bg-[radial-gradient(ellipse_at_center,rgba(212,175,55,0.12)_0%,transparent_70%)] pointer-events-none blur-3xl" />
 
