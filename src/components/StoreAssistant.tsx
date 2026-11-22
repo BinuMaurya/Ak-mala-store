@@ -39,7 +39,6 @@ export const StoreAssistant: React.FC = () => {
   const [draft, setDraft] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState('');
-  messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
