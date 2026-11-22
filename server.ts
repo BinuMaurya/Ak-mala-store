@@ -17,6 +17,7 @@ const festivalDiscountPercent = 15;
 const maxCartItems = 50;
 
 class GatewayError extends Error {}
+class ReviewVerificationError extends Error {}
 
 interface CartLineInput {
   productId: string;
@@ -90,11 +91,42 @@ interface StoredOrder {
   created_at: string;
 }
 
+interface StoredReview {
+  id: string;
+  product_id: string;
+  author: string;
+  city: string;
+  rating: number;
+  title: string;
+  comment: string;
+  photo_url: string | null;
+  verified_purchase: boolean;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+}
+
+interface StoredReviewSummary {
+  product_id: string;
+  average_rating: number;
+  review_count: number;
+}
+
+interface OfferConfig {
+  enabled: boolean;
+  code: string;
+  discountPercent: number;
+  minOrder: number;
+  startDate: string;
+  endDate: string;
+  freeDeliveryThreshold: number;
+}
+
 app.use(express.json({ limit: '4mb' }));
 
 const trackingAttempts = new Map<string, { count: number; resetAt: number }>();
 const trackingAttemptLimit = 10;
 const trackingAttemptWindowMs = 15 * 60 * 1000;
+const reviewAttempts = new Map<string, { count: number; resetAt: number }>();
 
 // ==================== SYSTEM STATUS ====================
 app.get('/api/plugins/status', (_request: Request, response: Response) => {
@@ -297,10 +329,38 @@ function parseVisitorId(input: unknown): string | null {
   return input;
 }
 
-function createPaymentQuote(cartLines: CartLineInput[], couponCode: unknown): PaymentQuote {
-  if (couponCode !== null && couponCode !== undefined && couponCode !== festivalCouponCode) {
-    throw new Error('This coupon is not available for online checkout.');
-  }
+async function getOfferConfig(): Promise<OfferConfig> {
+  const rows = await supabaseRequest<Array<{ content: StoreContent }>>(
+    'store_content?id=eq.main&select=content',
+    'GET'
+  );
+  const assets = rows[0]?.content?.siteAssets;
+  const configuredDiscount = assets?.offerDiscountPercent;
+  const configuredMinimum = assets?.offerMinOrder;
+  const configuredDeliveryMinimum = assets?.freeDeliveryThreshold;
+  return {
+    enabled: assets?.offerEnabled === undefined || assets.offerEnabled === true,
+    code: typeof assets?.offerCode === 'string' && assets.offerCode.trim() ? assets.offerCode.trim() : festivalCouponCode,
+    discountPercent: typeof configuredDiscount === 'number' && Number.isFinite(configuredDiscount) && configuredDiscount >= 1 && configuredDiscount <= 90
+      ? configuredDiscount
+      : festivalDiscountPercent,
+    minOrder: typeof configuredMinimum === 'number' && Number.isSafeInteger(configuredMinimum) && configuredMinimum >= 0
+      ? configuredMinimum
+      : 0,
+    startDate: typeof assets?.offerStartDate === 'string' ? assets.offerStartDate : '',
+    endDate: typeof assets?.offerEndDate === 'string' ? assets.offerEndDate : '',
+    freeDeliveryThreshold: typeof configuredDeliveryMinimum === 'number' && Number.isSafeInteger(configuredDeliveryMinimum) && configuredDeliveryMinimum >= 0
+      ? configuredDeliveryMinimum
+      : freeDeliveryThreshold
+  };
+}
+
+function isOfferConfigActive(offer: OfferConfig): boolean {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+  return offer.enabled && (!offer.startDate || today >= offer.startDate) && (!offer.endDate || today <= offer.endDate);
+}
+
+async function createPaymentQuote(cartLines: CartLineInput[], couponCode: unknown): Promise<PaymentQuote> {
   const subtotal = cartLines.reduce((total, line) => {
     const product = products.find((candidate) => candidate.id === line.productId);
     if (!product || !product.inStock) {
@@ -311,20 +371,42 @@ function createPaymentQuote(cartLines: CartLineInput[], couponCode: unknown): Pa
     return total + (product.price + size.extraPrice) * line.quantity;
   }, 0);
 
-  const discount = couponCode === festivalCouponCode ? Math.round(subtotal * (festivalDiscountPercent / 100)) : 0;
-  const deliveryCharge = subtotal > freeDeliveryThreshold ? 0 : deliveryFee;
+  const offer = await getOfferConfig();
+  const normalizedCode = typeof couponCode === 'string' ? couponCode.trim().toUpperCase() : '';
+  const couponApplied = Boolean(normalizedCode);
+  if (couponApplied && (
+    !isOfferConfigActive(offer) ||
+    normalizedCode !== offer.code.toUpperCase() ||
+    subtotal < offer.minOrder
+  )) {
+    throw new Error('This coupon is invalid, inactive, or the minimum order is not met.');
+  }
+
+  const discount = couponApplied ? Math.round(subtotal * (offer.discountPercent / 100)) : 0;
+  const deliveryCharge = subtotal >= offer.freeDeliveryThreshold ? 0 : deliveryFee;
   const total = Math.max(0, subtotal - discount + deliveryCharge);
   if (!Number.isSafeInteger(total) || total < 1) throw new Error('The payment amount is invalid.');
   return { subtotal, discount, deliveryCharge, total };
 }
 
-function createStoredOrderFields(
+async function createStoredOrderFields(
   cartLines: CartLineInput[],
   customer: CheckoutCustomer,
   couponCode: unknown,
   visitorId: string | null
-) {
-  const quote = createPaymentQuote(cartLines, couponCode);
+): Promise<{
+  visitor_id: string | null;
+  customer_name: string;
+  phone: string;
+  email: string | null;
+  shipping_address: ShippingAddress;
+  items: Array<{ productId: string; productName: string; selectedSize: string; quantity: number; pricePerUnit: number }>;
+  subtotal: number;
+  discount: number;
+  delivery_charge: number;
+  total: number;
+}> {
+  const quote = await createPaymentQuote(cartLines, couponCode);
   const items = cartLines.map((line) => {
     const product = products.find((candidate) => candidate.id === line.productId);
     const size = product?.availableSizes.find((option) => option.size === line.selectedSize);
@@ -509,6 +591,251 @@ app.put('/api/admin/content', async (request: Request, response: Response) => {
   }
 });
 
+function consumeReviewLimit(key: string, limit: number, windowMs: number): boolean {
+  const now = Date.now();
+  const current = reviewAttempts.get(key);
+  if (!current || current.resetAt <= now) {
+    reviewAttempts.set(key, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (current.count >= limit) return false;
+  current.count += 1;
+  return true;
+}
+
+function presentReview(review: StoredReview) {
+  return {
+    id: review.id,
+    productId: review.product_id,
+    author: review.author,
+    city: review.city,
+    rating: review.rating,
+    title: review.title,
+    comment: review.comment,
+    photoUrl: review.photo_url || undefined,
+    verifiedDevotee: review.verified_purchase,
+    status: review.status,
+    date: review.created_at
+  };
+}
+
+async function verifyReviewPurchase(orderNumber: string, phone: string, productId: string) {
+  const orders = await supabaseRequest<Array<Pick<
+    StoredOrder,
+    'id' | 'order_number' | 'phone' | 'email' | 'customer_name' | 'shipping_address' | 'items' | 'payment_method' | 'payment_status'
+  >>>(
+    `orders?order_number=eq.${encodeURIComponent(orderNumber)}&select=id,order_number,phone,email,customer_name,shipping_address,items,payment_method,payment_status&limit=1`,
+    'GET'
+  );
+  const order = orders[0];
+  if (!order || order.phone.replace(/\D/g, '') !== phone) {
+    throw new ReviewVerificationError('Order number and phone do not match a purchase.');
+  }
+  if (order.payment_status !== 'paid' && order.payment_method !== 'cod') {
+    throw new ReviewVerificationError('Only confirmed purchases can be reviewed.');
+  }
+  if (!order.items.some((item) => item.productId === productId)) {
+    throw new ReviewVerificationError('This product is not on the verified order.');
+  }
+  return order;
+}
+
+app.get('/api/reviews', async (request: Request, response: Response) => {
+  try {
+    const productId = typeof request.query.productId === 'string' ? request.query.productId.trim() : '';
+    const filter = productId ? `&product_id=eq.${encodeURIComponent(productId)}` : '';
+    const [rows, summaries] = await Promise.all([
+      supabaseRequest<StoredReview[]>(
+        `product_reviews?status=eq.approved${filter}&select=id,product_id,author,city,rating,title,comment,photo_url,verified_purchase,status,created_at&order=created_at.desc&limit=100`,
+        'GET'
+      ),
+      supabaseRequest<StoredReviewSummary[]>('product_review_summaries?select=product_id,average_rating,review_count', 'GET')
+    ]);
+    response.json({
+      reviews: rows.map(presentReview),
+      summaries: summaries.map((summary) => ({
+        productId: summary.product_id,
+        averageRating: summary.average_rating,
+        reviewCount: summary.review_count
+      }))
+    });
+  } catch {
+    response.status(502).json({ error: 'Customer reviews could not be loaded.' });
+  }
+});
+
+app.post('/api/reviews/photo-upload-url', async (request: Request, response: Response) => {
+  try {
+    const body = getRequestBody(request);
+    const orderNumber = typeof body.orderNumber === 'string' ? body.orderNumber.trim().toUpperCase() : '';
+    const phone = typeof body.phone === 'string' ? body.phone.replace(/\D/g, '') : '';
+    const productId = typeof body.productId === 'string' ? body.productId.trim() : '';
+    const contentType = body.contentType;
+    const size = body.size;
+    const extensionByType: Record<string, string> = {
+      'image/jpeg': '.jpg',
+      'image/png': '.png',
+      'image/webp': '.webp'
+    };
+    if (
+      typeof contentType !== 'string' ||
+      !extensionByType[contentType] ||
+      typeof size !== 'number' ||
+      size < 1 ||
+      size > 5 * 1024 * 1024
+    ) {
+      response.status(400).json({ error: 'Choose a JPEG, PNG, or WebP photo smaller than 5 MB.' });
+      return;
+    }
+    if (!/^AKM-[A-Z0-9]{5,12}$/.test(orderNumber) || phone.length < 10 || phone.length > 15 || !productId || productId.length > 120) {
+      response.status(400).json({ error: 'Enter valid order details before uploading a review photo.' });
+      return;
+    }
+    if (!consumeReviewLimit(`photo:${request.ip}`, 10, 15 * 60 * 1000)) {
+      response.status(429).json({ error: 'Too many photo uploads. Please try again later.' });
+      return;
+    }
+
+    await verifyReviewPurchase(orderNumber, phone, productId);
+    const { url, serviceRoleKey } = getSupabaseCredentials();
+    const objectPath = `reviews/${crypto.randomUUID()}${extensionByType[contentType]}`;
+    const storageResponse = await fetch(`${url}/storage/v1/object/upload/sign/ak-mala-media/${objectPath}`, {
+      method: 'POST',
+      headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ upsert: false })
+    });
+    const storageResult = await storageResponse.json() as { url?: string; signedUrl?: string };
+    if (!storageResponse.ok || !(storageResult.url || storageResult.signedUrl)) {
+      response.status(502).json({ error: 'Photo storage could not prepare the upload.' });
+      return;
+    }
+
+    const signedPath = storageResult.url || storageResult.signedUrl!;
+    const uploadUrl = signedPath.startsWith('http') ? signedPath : `${url}/storage/v1${signedPath.startsWith('/') ? signedPath : `/${signedPath}`}`;
+    response.json({
+      uploadUrl,
+      publicUrl: `${url}/storage/v1/object/public/ak-mala-media/${objectPath}`
+    });
+  } catch (error) {
+    response.status(error instanceof ReviewVerificationError ? 403 : 502).json({
+      error: error instanceof Error ? error.message : 'Unable to prepare review photo upload.'
+    });
+  }
+});
+
+app.post('/api/reviews', async (request: Request, response: Response) => {
+  try {
+    if (!consumeReviewLimit(`review:${request.ip}`, 5, 60 * 60 * 1000)) {
+      response.status(429).json({ error: 'Too many review submissions. Please try again later.' });
+      return;
+    }
+
+    const body = getRequestBody(request);
+    const orderNumber = typeof body.orderNumber === 'string' ? body.orderNumber.trim().toUpperCase() : '';
+    const phone = typeof body.phone === 'string' ? body.phone.replace(/\D/g, '') : '';
+    const productId = typeof body.productId === 'string' ? body.productId.trim() : '';
+    const rating = body.rating;
+    const title = typeof body.title === 'string' ? body.title.trim() : '';
+    const comment = typeof body.comment === 'string' ? body.comment.trim() : '';
+    const photoUrl = typeof body.photoUrl === 'string' ? body.photoUrl.trim() : '';
+    if (
+      !/^AKM-[A-Z0-9]{5,12}$/.test(orderNumber) ||
+      phone.length < 10 ||
+      phone.length > 15 ||
+      !productId ||
+      productId.length > 120 ||
+      typeof rating !== 'number' ||
+      !Number.isInteger(rating) ||
+      rating < 1 ||
+      rating > 5 ||
+      !title ||
+      title.length > 120 ||
+      !comment ||
+      comment.length > 2000
+    ) {
+      response.status(400).json({ error: 'Enter valid order details and a rating, title, and review.' });
+      return;
+    }
+
+    const order = await verifyReviewPurchase(orderNumber, phone, productId);
+
+    const { url } = getSupabaseCredentials();
+    if (photoUrl && !photoUrl.startsWith(`${url.replace(/\/$/, '')}/storage/v1/object/public/ak-mala-media/reviews/`)) {
+      response.status(400).json({ error: 'Use a photo uploaded with this review.' });
+      return;
+    }
+    const priorReviews = await supabaseRequest<StoredReview[]>(
+      `product_reviews?order_id=eq.${encodeURIComponent(order.id)}&product_id=eq.${encodeURIComponent(productId)}&select=id&limit=1`,
+      'GET'
+    );
+    if (priorReviews.length) {
+      response.status(409).json({ error: 'A review has already been submitted for this product and order.' });
+      return;
+    }
+
+    const [savedReview] = await supabaseRequest<StoredReview[]>(
+      'product_reviews',
+      'POST',
+      [{
+        order_id: order.id,
+        product_id: productId,
+        author: order.customer_name,
+        city: order.shipping_address.city,
+        rating,
+        title,
+        comment,
+        photo_url: photoUrl || null,
+        verified_purchase: true,
+        status: 'pending'
+      }],
+      'return=representation'
+    );
+    response.status(201).json({ review: presentReview(savedReview), pendingApproval: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Review could not be submitted.';
+    response.status(error instanceof ReviewVerificationError ? 403 : 502).json({ error: message });
+  }
+});
+
+app.get('/api/admin/reviews', async (request: Request, response: Response) => {
+  try {
+    await requireAdmin(request);
+    const status = request.query.status === 'pending' ? '&status=eq.pending' : '';
+    const rows = await supabaseRequest<StoredReview[]>(
+      `product_reviews?select=id,product_id,author,city,rating,title,comment,photo_url,verified_purchase,status,created_at&order=created_at.desc&limit=200${status}`,
+      'GET'
+    );
+    response.json({ reviews: rows.map(presentReview) });
+  } catch (error) {
+    response.status(403).json({ error: error instanceof Error ? error.message : 'Unable to load reviews.' });
+  }
+});
+
+app.patch('/api/admin/reviews/:id', async (request: Request, response: Response) => {
+  try {
+    await requireAdmin(request);
+    const id = request.params.id;
+    const status = getRequestBody(request).status;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) || !['approved', 'rejected'].includes(status as string)) {
+      response.status(400).json({ error: 'Choose approve or reject for a valid review.' });
+      return;
+    }
+    const [review] = await supabaseRequest<StoredReview[]>(
+      `product_reviews?id=eq.${encodeURIComponent(id)}&select=id,product_id,author,city,rating,title,comment,photo_url,verified_purchase,status,created_at`,
+      'PATCH',
+      { status },
+      'return=representation'
+    );
+    if (!review) {
+      response.status(404).json({ error: 'Review not found.' });
+      return;
+    }
+    response.json({ review: presentReview(review) });
+  } catch (error) {
+    response.status(403).json({ error: error instanceof Error ? error.message : 'Review moderation failed.' });
+  }
+});
+
 // ==================== MEDIA UPLOAD (CMS) ====================
 app.post('/api/admin/media/upload-url', async (request: Request, response: Response) => {
   try {
@@ -561,7 +888,7 @@ app.post('/api/payments/create-order', async (request: Request, response: Respon
     if (!['upi', 'card', 'netbanking', 'wallet'].includes(paymentMethod as string)) {
       throw new Error('Choose a supported payment method.');
     }
-    const orderFields = createStoredOrderFields(cartLines, customer, body.couponCode, visitorId);
+    const orderFields = await createStoredOrderFields(cartLines, customer, body.couponCode, visitorId);
     const order = await razorpayRequest<RazorpayOrder>('/orders', 'POST', {
       amount: orderFields.total * 100,
       currency: 'INR',
@@ -659,7 +986,7 @@ app.post('/api/orders/upi-qr', async (request: Request, response: Response) => {
       return;
     }
 
-    const orderFields = createStoredOrderFields(cartLines, customer, body.couponCode, visitorId);
+    const orderFields = await createStoredOrderFields(cartLines, customer, body.couponCode, visitorId);
     const [order] = await supabaseRequest<StoredOrder[]>(
       'orders',
       'POST',
@@ -686,7 +1013,7 @@ app.post('/api/orders/cod', async (request: Request, response: Response) => {
     const cartLines = parseCartLines(body.cart);
     const customer = parseCheckoutCustomer(body.customer);
     const visitorId = parseVisitorId(body.visitorId);
-    const orderFields = createStoredOrderFields(cartLines, customer, body.couponCode, visitorId);
+    const orderFields = await createStoredOrderFields(cartLines, customer, body.couponCode, visitorId);
     const [order] = await supabaseRequest<StoredOrder[]>(
       'orders',
       'POST',

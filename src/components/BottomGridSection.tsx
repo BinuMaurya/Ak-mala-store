@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { LazyImage } from './common/LazyImage';
+import { isOfferActive } from '../utils/offers';
 import {
   Play,
   Star,
@@ -17,7 +18,15 @@ import {
 } from 'lucide-react';
 
 export const BottomGridSection: React.FC = () => {
-  const { setSelectedCategory, setIsReviewOpen, videosList, siteAssets, setIsGalleryOpen } = useApp();
+  const {
+    setSelectedCategory,
+    setIsReviewOpen,
+    setReviewProductId,
+    reviews,
+    videosList,
+    siteAssets,
+    setIsGalleryOpen
+  } = useApp();
   const [activeVideo, setActiveVideo] = useState(videosList[0] || null);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
 
@@ -97,64 +106,40 @@ export const BottomGridSection: React.FC = () => {
                   Customer Reviews
                 </h3>
                 <button
-                  onClick={() => setIsReviewOpen(true)}
+                  onClick={() => {
+                    setReviewProductId(null);
+                    setIsReviewOpen(true);
+                  }}
                   className="text-xs text-[#E5C158] hover:underline cursor-pointer"
                 >
                   View All
                 </button>
               </div>
 
-              {/* Review 1 */}
-              <div className="p-3 rounded-2xl bg-white/[0.03] border border-white/5 mb-3">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <div className="w-7 h-7 rounded-full bg-amber-500/20 text-[#E5C158] font-bold text-xs flex items-center justify-center">
-                    PS
-                  </div>
-                  <div>
-                    <h5 className="text-xs font-bold text-white">Priya Sharma</h5>
-                    <div className="flex items-center text-amber-400">
-                      {[...Array(5)].map((_, i) => (
-                        <Star key={i} className="w-2.5 h-2.5 fill-amber-400" />
+              <div className="space-y-2">
+                {reviews.slice(0, 2).map((review) => (
+                  <article key={review.id} className="p-3 rounded-2xl bg-white/[0.03] border border-white/5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h5 className="text-xs font-bold text-white">{review.author}</h5>
+                        <p className="text-[10px] text-gray-400">{review.title}</p>
+                      </div>
+                      <span className="text-[9px] text-emerald-300 whitespace-nowrap">Verified purchase</span>
+                    </div>
+                    <div className="flex items-center text-amber-400 mt-1">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Star key={star} className={`w-2.5 h-2.5 ${star <= review.rating ? 'fill-amber-400' : 'text-gray-600'}`} />
                       ))}
                     </div>
-                  </div>
-                </div>
-                <p className="text-[11px] text-gray-300 leading-snug">
-                  "The mala is so beautiful and fresh. Perfect for our Ganpati decoration."
-                </p>
-
-                {/* Photo strip */}
-                <div className="flex items-center gap-1.5 mt-2">
-                  {[
-                    'https://images.unsplash.com/photo-1596704017254-9b121068fb31?w=100&auto=format&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1518895949257-7621c3c786d7?w=100&auto=format&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1508615039623-a25605d2b022?w=100&auto=format&fit=crop&q=80',
-                  ].map((img, i) => (
-                    <div key={i} className="w-8 h-8 rounded-lg overflow-hidden border border-amber-500/30">
-                      <LazyImage src={img} alt="review" className="w-full h-full object-cover" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Review 2 */}
-              <div className="p-3 rounded-2xl bg-white/[0.03] border border-white/5">
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="w-7 h-7 rounded-full bg-blue-500/20 text-blue-400 font-bold text-xs flex items-center justify-center">
-                    RV
-                  </div>
-                  <div>
-                    <h5 className="text-xs font-bold text-white">Rahul Verma</h5>
-                    <div className="flex items-center text-amber-400">
-                      {[...Array(5)].map((_, i) => (
-                        <Star key={i} className="w-2.5 h-2.5 fill-amber-400" />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <p className="text-[11px] text-gray-300 leading-snug">
-                  "Excellent quality & on time delivery. Very premium packaging."
-                </p>
+                    <p className="text-[11px] text-gray-300 leading-snug mt-1">{review.comment}</p>
+                    {review.photoUrl && (
+                      <LazyImage src={review.photoUrl} alt={`Photo shared by ${review.author}`} className="w-12 h-12 mt-2 rounded-lg object-cover" />
+                    )}
+                  </article>
+                ))}
+                {reviews.length === 0 && (
+                  <p className="text-xs text-gray-400 py-4">No verified reviews yet. Share your experience after your purchase.</p>
+                )}
               </div>
             </div>
           </div>
@@ -192,6 +177,7 @@ export const BottomGridSection: React.FC = () => {
           </div>
 
           {/* CARD 4: GANPATI FESTIVAL SPECIAL BANNER (Dynamic from CMS) */}
+          {isOfferActive(siteAssets) && (
           <div className="rounded-3xl bg-gradient-to-br from-[#2c1a05] via-[#1a0f02] to-[#0d0701] border-2 border-[#D4AF37]/60 p-5 shadow-2xl relative overflow-hidden flex flex-col justify-between">
             {/* Background Diya glow & Ganesha motif silhouette */}
             <div className="absolute top-2 right-2 text-6xl text-amber-500/15 pointer-events-none select-none font-devanagari">
@@ -208,7 +194,9 @@ export const BottomGridSection: React.FC = () => {
                 <span className="font-cinzel text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#FFF6D6] via-[#E5C158] to-[#D4AF37]">
                   {siteAssets.offerDiscountPercent}% OFF
                 </span>
-                <span className="text-xs text-gray-300 block">ON ALL ORDERS</span>
+                <span className="text-xs text-gray-300 block">
+                  {siteAssets.offerMinOrder > 0 ? `ON ORDERS OF ₹${siteAssets.offerMinOrder}+` : 'ON ALL ORDERS'}
+                </span>
               </div>
             </div>
 
@@ -234,6 +222,7 @@ export const BottomGridSection: React.FC = () => {
               </button>
             </div>
           </div>
+          )}
 
         </div>
       </div>

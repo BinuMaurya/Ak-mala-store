@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import type { Review } from '../../types';
 import {
   X,
   Star,
@@ -20,6 +21,7 @@ import {
   HeartHandshake,
   Award
 } from 'lucide-react';
+import { isOfferActive } from '../../utils/offers';
 
 export const ProductDetailModal: React.FC = () => {
   const {
@@ -31,11 +33,13 @@ export const ProductDetailModal: React.FC = () => {
     setIsCartOpen,
     setIsCheckoutOpen,
     applyCoupon,
-    showNotification
+    showNotification,
+    siteAssets,
+    reviews,
+    reviewSummaries,
+    setReviewProductId,
+    setIsReviewOpen
   } = useApp();
-
-  if (!selectedProductForDetail) return null;
-  const product = selectedProductForDetail;
 
   const [activeImageIdx, setActiveImageIdx] = useState(0);
   const [selectedSize, setSelectedSize] = useState<'16"' | '22"' | '28"' | '36"'>('22"');
@@ -44,17 +48,49 @@ export const ProductDetailModal: React.FC = () => {
   const [copiedCoupon, setCopiedCoupon] = useState(false);
   const [isDetailsOpen, setIsDetailsOpen] = useState(true);
   const [view360Active, setView360Active] = useState(false);
+  const [productReviews, setProductReviews] = useState<Review[]>([]);
 
+  useEffect(() => {
+    if (!selectedProductForDetail) {
+      setProductReviews([]);
+      return;
+    }
+
+    let active = true;
+    const fallbackReviews = reviews.filter((review) => review.productId === selectedProductForDetail.id);
+    void fetch(`/api/reviews?productId=${encodeURIComponent(selectedProductForDetail.id)}`)
+      .then(async (response) => {
+        const result = await response.json() as { reviews?: Review[]; error?: string };
+        if (!response.ok || !Array.isArray(result.reviews)) {
+          throw new Error(result.error || 'Product reviews could not be loaded.');
+        }
+        if (active) setProductReviews(result.reviews);
+      })
+      .catch((error: unknown) => {
+        console.error('Could not load product reviews:', error);
+        if (active) setProductReviews(fallbackReviews);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [selectedProductForDetail?.id, reviews]);
+
+  if (!selectedProductForDetail) return null;
+  const product = selectedProductForDetail;
   const images = product.galleryImages && product.galleryImages.length > 0 ? product.galleryImages : [product.image];
   const sizeObj = product.availableSizes.find((s) => s.size === selectedSize);
   const calculatedPrice = product.price + (sizeObj?.extraPrice || 0);
   const calculatedOriginal = product.originalPrice + (sizeObj?.extraPrice || 0);
   const isWish = isInWishlist(product.id);
+  const reviewSummary = reviewSummaries.find((summary) => summary.productId === product.id);
+  const averageRating = reviewSummary?.reviewCount ? reviewSummary.averageRating.toFixed(1) : null;
 
   const handleCopyCoupon = () => {
-    applyCoupon('FEST15');
+    const applied = applyCoupon(siteAssets.offerCode);
+    if (!applied) return;
     setCopiedCoupon(true);
-    showNotification('Coupon FEST15 copied & applied!');
+    showNotification(`Coupon ${siteAssets.offerCode} applied!`);
     setTimeout(() => setCopiedCoupon(false), 2000);
   };
 
@@ -180,16 +216,39 @@ export const ProductDetailModal: React.FC = () => {
                 {product.hindiName}
               </p>
 
-              <div className="flex items-center gap-3 mt-2 text-xs">
-                <div className="flex items-center gap-1 text-amber-400">
+              <div className="flex flex-wrap items-center gap-3 mt-2 text-xs">
+                <span className="flex items-center gap-1 text-amber-400">
                   <Star className="w-4 h-4 fill-amber-400" />
-                  <span className="font-bold">{product.rating}</span>
-                  <span className="text-gray-400">({product.reviewsCount} Reviews)</span>
-                </div>
-                <span className="text-gray-500">|</span>
-                <span className="text-emerald-400 font-semibold">200+ Sold</span>
+                  <span className="font-bold">{averageRating || '—'}</span>
+                  <span className="text-gray-400">({reviewSummary?.reviewCount || 0} verified reviews)</span>
+                </span>
+                <button
+                  onClick={() => {
+                    setReviewProductId(product.id);
+                    setIsReviewOpen(true);
+                  }}
+                  className="text-[#E5C158] hover:underline"
+                >
+                  Read or write a review
+                </button>
               </div>
             </div>
+
+            {productReviews.slice(0, 2).map((review) => (
+              <article key={review.id} className="p-3 rounded-xl bg-white/[0.03] border border-white/10">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-bold text-white">{review.title}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">{review.author}{review.city ? ` · ${review.city}` : ''}</p>
+                  </div>
+                  <span className="text-[9px] text-emerald-300 whitespace-nowrap">Verified purchase</span>
+                </div>
+                <p className="text-xs text-gray-300 mt-2">{review.comment}</p>
+                {review.photoUrl && (
+                  <img src={review.photoUrl} alt={`Photo shared by ${review.author}`} className="mt-2 max-h-32 rounded-lg object-cover" />
+                )}
+              </article>
+            ))}
 
             {/* Price Box */}
             <div className="flex items-baseline gap-3 p-3.5 rounded-2xl bg-white/[0.03] border border-[#D4AF37]/30">
@@ -270,25 +329,30 @@ export const ProductDetailModal: React.FC = () => {
             </div>
 
             {/* OFFERS & COUPONS */}
+            {isOfferActive(siteAssets) && (
             <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-mono font-bold bg-amber-400 text-black px-2 py-0.5 rounded">
-                    FEST15
+                    {siteAssets.offerCode}
                   </span>
-                  <span className="text-xs text-white font-semibold">Flat 15% OFF on all orders</span>
+                  <span className="text-xs text-white font-semibold">Flat {siteAssets.offerDiscountPercent}% OFF</span>
                 </div>
-                <p className="text-[10px] text-amber-200/70 mt-1">+ 2 More offers available at checkout</p>
+                <p className="text-[10px] text-amber-200/70 mt-1">
+                  {siteAssets.offerMinOrder > 0 ? `Minimum order ₹${siteAssets.offerMinOrder}` : siteAssets.offerBannerText}
+                </p>
               </div>
 
               <button
                 onClick={handleCopyCoupon}
+                disabled={!isOfferActive(siteAssets)}
                 className="px-3 py-1.5 rounded-lg bg-black/50 border border-amber-400 text-amber-300 text-xs font-bold hover:bg-black transition-all flex items-center gap-1 cursor-pointer"
               >
                 {copiedCoupon ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedCoupon ? 'APPLIED' : 'COPY'}</span>
+                <span>{copiedCoupon ? 'APPLIED' : isOfferActive(siteAssets) ? 'APPLY' : 'INACTIVE'}</span>
               </button>
             </div>
+            )}
 
             {/* DELIVERY PINCODE CHECKER */}
             <div className="space-y-1.5">

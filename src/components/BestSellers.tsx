@@ -23,7 +23,8 @@ export const BestSellers: React.FC = () => {
     isInWishlist,
     toggleWishlist,
     setSelectedProductForDetail,
-    t
+    t,
+    reviewSummaries
   } = useApp();
 
   const [activeSizeMap, setActiveSizeMap] = useState<Record<string, '16"' | '22"' | '28"' | '36"'>>({});
@@ -98,6 +99,8 @@ export const BestSellers: React.FC = () => {
         {/* Product Cards Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {filteredProducts.map((product) => {
+            const reviewSummary = reviewSummaries.find((summary) => summary.productId === product.id);
+            const averageRating = reviewSummary?.reviewCount ? reviewSummary.averageRating.toFixed(1) : null;
             const chosenSize = activeSizeMap[product.id] || product.availableSizes[0]?.size || '22"';
             const sizeObj = product.availableSizes.find((s) => s.size === chosenSize);
             const calculatedPrice = product.price + (sizeObj?.extraPrice || 0);
@@ -165,9 +168,9 @@ export const BestSellers: React.FC = () => {
                   {/* Rating & Reviews */}
                   <div className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-1 text-amber-400">
-                      <Star className="w-3.5 h-3.5 fill-amber-400" />
-                      <span className="font-bold">{product.rating}</span>
-                      <span className="text-gray-400 text-[11px]">({product.reviewsCount})</span>
+                      {averageRating && <Star className="w-3.5 h-3.5 fill-amber-400" />}
+                      <span className="font-bold">{averageRating || 'New'}</span>
+                      <span className="text-gray-400 text-[11px]">({reviewSummary?.reviewCount || 0} reviews)</span>
                     </div>
 
                     <div className="flex items-center gap-1 text-[11px] text-emerald-400">

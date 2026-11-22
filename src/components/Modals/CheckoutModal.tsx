@@ -100,7 +100,7 @@ export const CheckoutModal: React.FC = () => {
               selectedSize,
               quantity
             })),
-            couponCode: appliedCoupon,
+            couponCode: discount > 0 ? appliedCoupon : null,
             customer,
             visitorId
           })
@@ -124,7 +124,7 @@ export const CheckoutModal: React.FC = () => {
       } else {
         const payment = await startRazorpayCheckout({
           cart,
-          couponCode: appliedCoupon,
+          couponCode: discount > 0 ? appliedCoupon : null,
           expectedTotal: finalTotal,
           method: paymentMethod === 'wallets' ? 'wallet' : paymentMethod,
           customer: {

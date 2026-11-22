@@ -16,6 +16,7 @@ import {
   Layers,
   Settings
 } from 'lucide-react';
+import { isOfferActive } from '../utils/offers';
 
 export const Navbar: React.FC = () => {
   const {
@@ -194,7 +195,7 @@ export const Navbar: React.FC = () => {
           {/* 4. Action Icons: Wishlist, Cart, User Login */}
           <div className="flex items-center gap-2 sm:gap-4">
             {/* Wishlist Button */}
-            <button
+            {isOfferActive(siteAssets) && <button
               onClick={() => {
                 const el = document.getElementById('bestsellers-section');
                 if (el) el.scrollIntoView({ behavior: 'smooth' });
@@ -208,7 +209,7 @@ export const Navbar: React.FC = () => {
                   {wishlistIds.length}
                 </span>
               )}
-            </button>
+            </button>}
 
             {/* Cart Button */}
             <button

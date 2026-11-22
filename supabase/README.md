@@ -7,7 +7,8 @@ media in Supabase. The browser never receives the server-only secret key.
 
 1. Create a Supabase project and run `schema.sql` in its SQL Editor. Then run
    `migrations/20261115_shared_store_content.sql` to create the shared catalog
-   table and public media bucket. For an existing project, also run
+   table and public media bucket, and `migrations/20261122_reviews.sql` to
+   enable verified customer reviews. For an existing project, also run
    `migrations/20261111_delivery_otp.sql` before using delivery confirmation.
 2. In Authentication, enable email OTP/magic-link sign-in. Add the deployed
    website URL to the allowed redirect URLs. Add the owner's verified email

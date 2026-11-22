@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   X,
@@ -7,10 +7,10 @@ import {
   Plus,
   Minus,
   ArrowRight,
-  ShieldCheck,
-  Tag,
-  CheckCircle2
+  CheckCircle2,
+  XCircle
 } from 'lucide-react';
+import { isOfferActive } from '../../utils/offers';
 
 export const CartDrawer: React.FC = () => {
   const {
@@ -25,8 +25,12 @@ export const CartDrawer: React.FC = () => {
     deliveryCharge,
     finalTotal,
     appliedCoupon,
+    applyCoupon,
+    removeCoupon,
+    siteAssets,
     setIsCheckoutOpen
   } = useApp();
+  const [couponCode, setCouponCode] = useState('');
 
   if (!isCartOpen) return null;
 
@@ -76,15 +80,15 @@ export const CartDrawer: React.FC = () => {
         {/* Free Shipping Progress Indicator */}
         <div className="bg-amber-500/10 px-4 py-2 border-b border-amber-500/20 text-xs text-amber-200 flex items-center justify-between">
           <span>
-            {subtotal >= 999 ? (
+            {subtotal >= (siteAssets.freeDeliveryThreshold ?? 999) ? (
               <span className="text-emerald-400 font-bold flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5" /> FREE Cold-Chain Delivery Unlocked!
               </span>
             ) : (
-              <span>Add ₹{999 - subtotal} more for Free Delivery!</span>
+              <span>Add ₹{Math.max(0, (siteAssets.freeDeliveryThreshold ?? 999) - subtotal)} more for Free Delivery!</span>
             )}
           </span>
-          <span className="font-mono font-bold">₹999 Target</span>
+          <span className="font-mono font-bold">₹{siteAssets.freeDeliveryThreshold ?? 999} Target</span>
         </div>
 
         {/* Items List */}
@@ -172,6 +176,32 @@ export const CartDrawer: React.FC = () => {
             <div className="text-xs font-bold uppercase tracking-wider text-gray-300">
               PRICE DETAILS
             </div>
+
+            {isOfferActive(siteAssets) && (
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  applyCoupon(couponCode);
+                }}
+                className="flex gap-2"
+              >
+                <input
+                  value={couponCode}
+                  onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
+                  placeholder={appliedCoupon || 'Enter coupon code'}
+                  aria-label="Coupon code"
+                  className="min-w-0 flex-1 px-3 py-2 rounded-xl bg-black/50 border border-white/15 text-xs text-white"
+                />
+                <button type="submit" className="px-3 py-2 rounded-xl border border-amber-400/40 text-amber-200 text-xs font-bold">
+                  Apply
+                </button>
+                {appliedCoupon && (
+                  <button type="button" onClick={removeCoupon} aria-label="Remove coupon" className="p-2 rounded-xl text-gray-400">
+                    <XCircle className="w-4 h-4" />
+                  </button>
+                )}
+              </form>
+            )}
 
             <div className="space-y-1.5 text-xs">
               <div className="flex justify-between text-gray-400">

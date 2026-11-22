@@ -10,6 +10,7 @@ import {
   HeartHandshake,
   ArrowRight
 } from 'lucide-react';
+import { isOfferActive } from '../utils/offers';
 
 export const Hero: React.FC = () => {
   const { t, setIsCustomBuilderOpen, setSelectedCategory, siteAssets } = useApp();
@@ -115,6 +116,7 @@ export const Hero: React.FC = () => {
           {/* RIGHT COLUMN: Floating Trust Cards & Quick Preview (3 cols) */}
           <div className="lg:col-span-3 flex flex-col space-y-3">
             {/* Mini Interactive Promo Card: Ganpati Festival Special */}
+            {isOfferActive(siteAssets) && (
             <div className="p-4 rounded-2xl bg-gradient-to-br from-[#2a1705] via-[#1a0f02] to-[#0d0701] border-2 border-[#D4AF37]/50 shadow-xl relative overflow-hidden group">
               <div className="absolute -top-6 -right-6 w-20 h-20 bg-amber-500/20 rounded-full blur-xl pointer-events-none" />
               
@@ -146,6 +148,7 @@ export const Hero: React.FC = () => {
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
+            )}
           </div>
 
         </div>

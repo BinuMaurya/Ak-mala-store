@@ -8,16 +8,19 @@ import {
   MediaItem,
   VideoItem,
   SiteAssetsConfig,
-  StoreContent
+  StoreContent,
+  Review,
+  ProductReviewSummary
 } from '../types';
 import { products } from '../data/products';
 import { translations } from '../data/translations';
 import { initialGalleryItems, generate1000GalleryItems } from '../data/gallerySeed';
 import { trackEvent } from '../services/analytics';
 import { supabase } from '../services/supabase';
+import { isOfferActive } from '../utils/offers';
 import type { Session } from '@supabase/supabase-js';
 
-type MalaSize = '4"' | '8"' | '12"' | '16"';
+type MalaSize = '4"' | '8"' | '12"' | '16"' | '22"' | '28"' | '36"';
 
 const defaultSiteAssets: SiteAssetsConfig = {
   heroGaneshaImage: '/ganpati_murti.png',
@@ -27,6 +30,10 @@ const defaultSiteAssets: SiteAssetsConfig = {
   offerBannerText: 'GANPATI FESTIVAL SPECIAL - FLAT 15% OFF ON ALL ORDERS',
   offerCode: 'FEST15',
   offerDiscountPercent: 15,
+  offerEnabled: true,
+  offerStartDate: '',
+  offerEndDate: '',
+  offerMinOrder: 0,
   freeDeliveryThreshold: 999,
   customThaliImage: '/ganpati_darshan.jpg',
   brandTagline: 'Pure Devotion. Premium Quality.'
@@ -132,6 +139,11 @@ interface AppContextType {
   setIsAuthOpen: (open: boolean) => void;
   isReviewOpen: boolean;
   setIsReviewOpen: (open: boolean) => void;
+  reviewProductId: string | null;
+  setReviewProductId: (productId: string | null) => void;
+  reviews: Review[];
+  reviewSummaries: ProductReviewSummary[];
+  refreshReviews: () => Promise<void>;
   isAdminOpen: boolean;
   setIsAdminOpen: (open: boolean) => void;
   isOwner: boolean;
@@ -163,6 +175,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [siteAssets, setSiteAssets] = useState<SiteAssetsConfig>(defaultSiteAssets);
   const [galleryItems, setGalleryItems] = useState<MediaItem[]>(initialGalleryItems);
   const [videosList, setVideosList] = useState<VideoItem[]>(defaultVideos);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [reviewSummaries, setReviewSummaries] = useState<ProductReviewSummary[]>([]);
   const [storeContentReady, setStoreContentReady] = useState(false);
   const storeContentSaveQueue = React.useRef<Promise<void>>(Promise.resolve());
 
@@ -204,7 +218,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   // Coupon
-  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(siteAssets.offerCode || 'FEST15');
+  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
 
   // Modals & Panels
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -215,6 +229,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
+  const [reviewProductId, setReviewProductId] = useState<string | null>(null);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
   const [isOwnerChecking, setIsOwnerChecking] = useState(false);
@@ -262,6 +277,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, 3800);
   }, []);
 
+  const refreshReviews = React.useCallback(async () => {
+    const response = await fetch('/api/reviews');
+    const result = await response.json() as {
+      reviews?: Review[];
+      summaries?: ProductReviewSummary[];
+      error?: string;
+    };
+    if (!response.ok || !Array.isArray(result.reviews) || !Array.isArray(result.summaries)) {
+      throw new Error(result.error || 'Customer reviews could not be loaded.');
+    }
+    setReviews(result.reviews);
+    setReviewSummaries(result.summaries);
+  }, []);
+
+  useEffect(() => {
+    void refreshReviews().catch((error: unknown) => {
+      console.error('Could not load customer reviews:', error);
+    });
+  }, [refreshReviews]);
+
   useEffect(() => {
     if (storeContentReady) return;
     let active = true;
@@ -281,7 +316,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
           if (active) {
             setAllProducts(content.products);
-            setSiteAssets(content.siteAssets);
+            setSiteAssets({ ...defaultSiteAssets, ...content.siteAssets });
             setGalleryItems(content.galleryItems);
             setVideosList(content.videosList);
           }
@@ -460,6 +495,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // CMS Functions
   const updateSiteAssets = (updated: Partial<SiteAssetsConfig>) => {
     setSiteAssets((prev) => ({ ...prev, ...updated }));
+    if (
+      'offerCode' in updated ||
+      'offerEnabled' in updated ||
+      'offerStartDate' in updated ||
+      'offerEndDate' in updated ||
+      'offerMinOrder' in updated ||
+      'offerDiscountPercent' in updated
+    ) {
+      setAppliedCoupon(null);
+    }
     showNotification('Site assets & branding updated successfully!');
   };
 
@@ -637,12 +682,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const subtotal = cart.reduce((acc, item) => acc + item.pricePerUnit * item.quantity, 0);
 
   const applyCoupon = (code: string): boolean => {
-    if (code.toUpperCase().trim() === siteAssets.offerCode.toUpperCase().trim()) {
+    if (
+      isOfferActive(siteAssets) &&
+      code.toUpperCase().trim() === siteAssets.offerCode.toUpperCase().trim() &&
+      subtotal >= (siteAssets.offerMinOrder || 0)
+    ) {
       setAppliedCoupon(siteAssets.offerCode);
       showNotification(`Coupon ${siteAssets.offerCode} applied! ${siteAssets.offerDiscountPercent}% discount granted.`);
       return true;
     }
-    showNotification(`Invalid coupon code. Try ${siteAssets.offerCode}!`);
+    if (code.toUpperCase().trim() === siteAssets.offerCode.toUpperCase().trim() && isOfferActive(siteAssets) && subtotal < (siteAssets.offerMinOrder || 0)) {
+      showNotification(`Add items worth ₹${(siteAssets.offerMinOrder || 0) - subtotal} more to use this coupon.`);
+    } else {
+      showNotification('This coupon is invalid or no longer active.');
+    }
     return false;
   };
 
@@ -651,10 +704,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const discount =
-    appliedCoupon === siteAssets.offerCode
+    isOfferActive(siteAssets) &&
+    subtotal >= (siteAssets.offerMinOrder || 0) &&
+    appliedCoupon?.toUpperCase() === siteAssets.offerCode.toUpperCase()
       ? Math.round(subtotal * (siteAssets.offerDiscountPercent / 100))
       : 0;
-  const deliveryCharge = subtotal > siteAssets.freeDeliveryThreshold || subtotal === 0 ? 0 : 99;
+  const deliveryCharge = subtotal >= (siteAssets.freeDeliveryThreshold ?? 999) || subtotal === 0 ? 0 : 99;
   const finalTotal = Math.max(0, subtotal - discount + deliveryCharge);
 
   // Wishlist
@@ -753,6 +808,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsAuthOpen,
         isReviewOpen,
         setIsReviewOpen,
+        reviewProductId,
+        setReviewProductId,
+        reviews,
+        reviewSummaries,
+        refreshReviews,
         isAdminOpen,
         setIsAdminOpen,
         isOwner,

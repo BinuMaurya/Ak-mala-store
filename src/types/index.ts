@@ -64,9 +64,14 @@ export interface Review {
   title: string;
   comment: string;
   verifiedDevotee: boolean;
-  deityPurchasedFor: string;
-  helpfulCount: number;
-  userVotedHelpful?: boolean;
+  photoUrl?: string;
+  status?: 'pending' | 'approved' | 'rejected';
+}
+
+export interface ProductReviewSummary {
+  productId: string;
+  averageRating: number;
+  reviewCount: number;
 }
 
 export interface Order {
@@ -125,6 +130,10 @@ export interface SiteAssetsConfig {
   offerBannerText: string;
   offerCode: string;
   offerDiscountPercent: number;
+  offerEnabled: boolean;
+  offerStartDate: string;
+  offerEndDate: string;
+  offerMinOrder: number;
   freeDeliveryThreshold: number;
   customThaliImage: string;
   brandTagline: string;

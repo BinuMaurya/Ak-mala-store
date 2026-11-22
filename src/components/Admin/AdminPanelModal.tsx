@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Product, MediaItem, VideoItem } from '../../types';
+import { Product, MediaItem, VideoItem, Review } from '../../types';
 import { MediaGalleryPickerModal } from './MediaGalleryPickerModal';
 import { MediaStudioSection } from './MediaStudioSection';
 import { uploadStoreMedia } from '../../services/mediaStorage';
+import { supabase } from '../../services/supabase';
 import {
   X,
   Settings,
@@ -32,13 +33,17 @@ import {
   Database,
   Bot,
   BarChart3,
-  AlertCircle
+  AlertCircle,
+  Star,
+  Check,
+  XCircle
 } from 'lucide-react';
 
 export const AdminPanelModal: React.FC = () => {
   const {
     isAdminOpen,
     isOwner,
+    adminAccessToken,
     setIsAdminOpen,
     siteAssets,
     updateSiteAssets,
@@ -56,11 +61,15 @@ export const AdminPanelModal: React.FC = () => {
     addVideoItem,
     updateVideoItem,
     deleteVideoItem,
+    refreshReviews,
     resetToDefaults,
     showNotification
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'media_studio' | 'murti' | 'products' | 'offers' | 'videos' | 'gallery' | 'plugins'>('media_studio');
+  const [activeTab, setActiveTab] = useState<'media_studio' | 'murti' | 'products' | 'offers' | 'reviews' | 'videos' | 'gallery' | 'plugins'>('media_studio');
+  const [pendingReviews, setPendingReviews] = useState<Review[]>([]);
+  const [reviewsError, setReviewsError] = useState('');
+  const [moderatingReviewId, setModeratingReviewId] = useState<string | null>(null);
   const [pluginStatus, setPluginStatus] = useState<{ gemini: boolean; supabase: boolean; razorpay: boolean } | null>(null);
   const [pluginStatusError, setPluginStatusError] = useState(false);
   const [pluginRefresh, setPluginRefresh] = useState(0);
@@ -146,7 +155,23 @@ export const AdminPanelModal: React.FC = () => {
   const [offerText, setOfferText] = useState(siteAssets.offerBannerText);
   const [couponCode, setCouponCode] = useState(siteAssets.offerCode);
   const [discountPct, setDiscountPct] = useState(siteAssets.offerDiscountPercent);
+  const [offerEnabled, setOfferEnabled] = useState(siteAssets.offerEnabled !== false);
+  const [offerStartDate, setOfferStartDate] = useState(siteAssets.offerStartDate || '');
+  const [offerEndDate, setOfferEndDate] = useState(siteAssets.offerEndDate || '');
+  const [offerMinOrder, setOfferMinOrder] = useState(siteAssets.offerMinOrder || 0);
   const [freeShipThreshold, setFreeShipThreshold] = useState(siteAssets.freeDeliveryThreshold);
+
+  useEffect(() => {
+    if (activeTab !== 'offers') return;
+    setOfferText(siteAssets.offerBannerText);
+    setCouponCode(siteAssets.offerCode);
+    setDiscountPct(siteAssets.offerDiscountPercent);
+    setOfferEnabled(siteAssets.offerEnabled !== false);
+    setOfferStartDate(siteAssets.offerStartDate || '');
+    setOfferEndDate(siteAssets.offerEndDate || '');
+    setOfferMinOrder(siteAssets.offerMinOrder || 0);
+    setFreeShipThreshold(siteAssets.freeDeliveryThreshold);
+  }, [activeTab, siteAssets]);
 
   // New Product Form
   const [showAddProduct, setShowAddProduct] = useState(false);
@@ -236,12 +261,86 @@ export const AdminPanelModal: React.FC = () => {
 
   const handleSaveOffers = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!/^[A-Z0-9_-]{3,32}$/.test(couponCode.trim())) {
+      showNotification('Coupon code must be 3–32 letters, numbers, hyphens, or underscores.');
+      return;
+    }
+    if (offerStartDate && offerEndDate && offerEndDate < offerStartDate) {
+      showNotification('Offer end date must be on or after the start date.');
+      return;
+    }
     updateSiteAssets({
       offerBannerText: offerText,
-      offerCode: couponCode,
+      offerCode: couponCode.trim(),
       offerDiscountPercent: Number(discountPct),
+      offerEnabled,
+      offerStartDate,
+      offerEndDate,
+      offerMinOrder: Number(offerMinOrder),
       freeDeliveryThreshold: Number(freeShipThreshold)
     });
+  };
+
+  useEffect(() => {
+    if (activeTab !== 'reviews') return;
+    let active = true;
+    setReviewsError('');
+    void (async () => {
+      let token = adminAccessToken;
+      if (!token && supabase) {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        token = data.session?.access_token || null;
+      }
+      if (!token) throw new Error('Admin access expired. Unlock the owner panel again.');
+      const response = await fetch('/api/admin/reviews?status=pending', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const result = await response.json() as { reviews?: Review[]; error?: string };
+      if (!response.ok || !Array.isArray(result.reviews)) {
+        throw new Error(result.error || 'Pending reviews could not be loaded.');
+      }
+      if (active) setPendingReviews(result.reviews);
+    })().catch((error: unknown) => {
+      if (!active) return;
+      const message = error instanceof Error ? error.message : 'Pending reviews could not be loaded.';
+      setReviewsError(message);
+      showNotification(message);
+    });
+    return () => {
+      active = false;
+    };
+  }, [activeTab, adminAccessToken, showNotification]);
+
+  const moderateReview = async (reviewId: string, status: 'approved' | 'rejected') => {
+    setModeratingReviewId(reviewId);
+    try {
+      let token = adminAccessToken;
+      if (!token && supabase) {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        token = data.session?.access_token || null;
+      }
+      if (!token) throw new Error('Admin access expired. Unlock the owner panel again.');
+      const response = await fetch(`/api/admin/reviews/${encodeURIComponent(reviewId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status })
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || 'Review moderation failed.');
+      setPendingReviews((current) => current.filter((review) => review.id !== reviewId));
+      if (status === 'approved') {
+        void refreshReviews().catch((error: unknown) => {
+          console.error('Approved review could not be refreshed in the storefront:', error);
+        });
+      }
+      showNotification(status === 'approved' ? 'Review approved and published.' : 'Review rejected.');
+    } catch (error) {
+      showNotification(error instanceof Error ? error.message : 'Review moderation failed.');
+    } finally {
+      setModeratingReviewId(null);
+    }
   };
 
   const handleCreateProduct = (e: React.FormEvent) => {
@@ -331,8 +430,9 @@ export const AdminPanelModal: React.FC = () => {
             { id: 'murti', label: '1. Murti & 3D Hero', icon: Image },
             { id: 'products', label: `2. Products (${allProducts.length})`, icon: ShoppingBag },
             { id: 'offers', label: '3. Offers & Coupons', icon: Tag },
-            { id: 'videos', label: `4. Videos (${videosList.length})`, icon: Video },
-            { id: 'gallery', label: `5. 1,000+ Gallery (${galleryItems.length})`, icon: Layers },
+            { id: 'reviews', label: `4. Reviews (${pendingReviews.length})`, icon: Star },
+            { id: 'videos', label: `5. Videos (${videosList.length})`, icon: Video },
+            { id: 'gallery', label: `6. 1,000+ Gallery (${galleryItems.length})`, icon: Layers },
             { id: 'plugins', label: 'Plugins', icon: Plug },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -940,9 +1040,22 @@ export const AdminPanelModal: React.FC = () => {
               </div>
 
               <form onSubmit={handleSaveOffers} className="max-w-xl space-y-4 text-xs">
+                <label className="flex items-center justify-between p-3 rounded-xl bg-black/40 border border-white/10">
+                  <span className="font-bold text-gray-200">Offer status</span>
+                  <span className="flex items-center gap-2 text-amber-200">
+                    {offerEnabled ? 'ON' : 'OFF'}
+                    <input
+                      type="checkbox"
+                      checked={offerEnabled}
+                      onChange={(e) => setOfferEnabled(e.target.checked)}
+                      className="accent-amber-400 w-4 h-4"
+                    />
+                  </span>
+                </label>
+
                 <div>
                   <label className="font-bold text-gray-200 block mb-1">
-                    Top Announcement Bar Promo Text:
+                    Offer banner text:
                   </label>
                   <input
                     type="text"
@@ -959,6 +1072,7 @@ export const AdminPanelModal: React.FC = () => {
                     <input
                       type="text"
                       required
+                      maxLength={32}
                       value={couponCode}
                       onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
                       className="w-full p-2.5 rounded-xl bg-black/60 border border-amber-400 text-amber-300 font-mono font-bold"
@@ -978,10 +1092,44 @@ export const AdminPanelModal: React.FC = () => {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-gray-200 block mb-1">Start date, India time (optional):</label>
+                    <input
+                      type="date"
+                      value={offerStartDate}
+                      onChange={(e) => setOfferStartDate(e.target.value)}
+                      className="w-full p-2.5 rounded-xl bg-black/60 border border-white/20 text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-gray-200 block mb-1">End date, India time (optional):</label>
+                    <input
+                      type="date"
+                      value={offerEndDate}
+                      onChange={(e) => setOfferEndDate(e.target.value)}
+                      className="w-full p-2.5 rounded-xl bg-black/60 border border-white/20 text-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="font-bold text-gray-200 block mb-1">Minimum order for coupon (₹):</label>
+                  <input
+                    type="number"
+                    min={0}
+                    required
+                    value={offerMinOrder}
+                    onChange={(e) => setOfferMinOrder(Number(e.target.value))}
+                    className="w-full p-2.5 rounded-xl bg-black/60 border border-white/20 text-white font-bold"
+                  />
+                </div>
+
                 <div>
                   <label className="font-bold text-gray-200 block mb-1">Free Delivery Minimum Cart Total (₹):</label>
                   <input
                     type="number"
+                    min={0}
                     required
                     value={freeShipThreshold}
                     onChange={(e) => setFreeShipThreshold(Number(e.target.value))}
@@ -997,6 +1145,58 @@ export const AdminPanelModal: React.FC = () => {
                   <span>Save Festival Offers</span>
                 </button>
               </form>
+            </div>
+          )}
+
+          {activeTab === 'reviews' && (
+            <div className="space-y-4">
+              <div>
+                <h4 className="font-cinzel text-base font-bold text-white">Review moderation</h4>
+                <p className="text-xs text-gray-400 mt-1">Only order-verified reviews are listed here. Approve a review to publish it.</p>
+              </div>
+              {reviewsError ? (
+                <p role="alert" className="text-sm text-red-300">{reviewsError}</p>
+              ) : pendingReviews.length === 0 ? (
+                <p className="text-sm text-gray-400">No reviews waiting for approval.</p>
+              ) : pendingReviews.map((review) => (
+                <article key={review.id} className="p-4 rounded-2xl bg-black/30 border border-white/10">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold text-white">{review.title}</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {allProducts.find((product) => product.id === review.productId)?.name || review.productId}
+                        {' · '}{review.author}{review.city ? ` · ${review.city}` : ''}
+                      </p>
+                    </div>
+                    <span className="text-[10px] text-emerald-300 whitespace-nowrap">Verified purchase</span>
+                  </div>
+                  <div className="flex gap-0.5 mt-2">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <Star key={star} className={`w-3.5 h-3.5 ${star <= review.rating ? 'fill-amber-400 text-amber-400' : 'text-gray-600'}`} />
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-300 mt-2 whitespace-pre-wrap">{review.comment}</p>
+                  {review.photoUrl && <img src={review.photoUrl} alt="Customer review" className="mt-3 max-h-48 rounded-xl object-cover" />}
+                  <div className="flex gap-2 mt-4">
+                    <button
+                      type="button"
+                      disabled={moderatingReviewId === review.id}
+                      onClick={() => void moderateReview(review.id, 'approved')}
+                      className="px-3 py-2 rounded-lg bg-emerald-500/15 border border-emerald-400/30 text-emerald-200 text-xs font-bold disabled:opacity-50"
+                    >
+                      <Check className="w-3.5 h-3.5 inline mr-1" />Approve
+                    </button>
+                    <button
+                      type="button"
+                      disabled={moderatingReviewId === review.id}
+                      onClick={() => void moderateReview(review.id, 'rejected')}
+                      className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-400/30 text-red-200 text-xs font-bold disabled:opacity-50"
+                    >
+                      <XCircle className="w-3.5 h-3.5 inline mr-1" />Reject
+                    </button>
+                  </div>
+                </article>
+              ))}
             </div>
           )}
 
