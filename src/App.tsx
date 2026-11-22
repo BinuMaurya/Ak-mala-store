@@ -7,6 +7,7 @@ import { MobileBottomNav } from './components/MobileBottomNav';
 import { Sparkles, BarChart3 } from 'lucide-react';
 import { AnalyticsConsentNotice } from './components/AnalyticsConsentNotice';
 import { StoreAssistant } from './components/StoreAssistant';
+import { VoiceShoppingGuide } from './components/VoiceShoppingGuide';
 
 // Lazy loading all major homepage sections & heavy components
 const Hero = lazy(() =>
@@ -161,6 +162,7 @@ const MainContent: React.FC = () => {
       {/* Persistent Mobile Bottom Bar */}
       <MobileBottomNav onOpenOrders={() => setOrderHistoryOpen(true)} />
       <StoreAssistant />
+      <VoiceShoppingGuide />
 
       {/* Interactive Global Modals with Suspense */}
       <Suspense fallback={null}>
