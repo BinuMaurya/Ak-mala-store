@@ -449,7 +449,7 @@ app.post('/api/assistant/chat', async (request: Request, response: Response) => 
     const latestMessage = body.messages[body.messages.length - 1];
     const suggestsProducts = productSuggestionIntent.test(latestMessage.text);
     if (suggestsProducts) {
-      response.json({ reply: 'Here are the matching malas:', products: getSuggestedProducts(latestMessage.text) });
+      response.json({ reply: 'आपके लिए माला के कुछ विकल्प नीचे दिए गए हैं। तस्वीर और कीमत देखकर पसंद की माला चुनें।', products: getSuggestedProducts(latestMessage.text) });
       return;
     }
 
@@ -466,7 +466,7 @@ app.post('/api/assistant/chat', async (request: Request, response: Response) => 
         role: m.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: m.text.trim() }]
       })),
-      config: { systemInstruction: 'You are the helpful AK MALA online store assistant.' }
+      config: { systemInstruction: 'You are AK MALA Store\'s helpful shopping assistant. Reply in simple Hindi or Hinglish, matching the customer\'s language. Be warm, clear, and respectful. Help customers compare malas, colors, designs, product descriptions, store offers, delivery, and order questions. Only make product claims supported by the product information available in the conversation or catalog; never invent handmade details, materials, freshness, stock, discounts, delivery dates, reviews, or guarantees. If you do not know something, say so and guide the customer to the product page or store support. Do not ask for sensitive payment credentials or OTPs.' }
     });
     response.json({ reply: result.text?.trim() || 'Hello! How can I help you?' });
   } catch (error) {
