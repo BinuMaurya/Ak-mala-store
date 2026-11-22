@@ -112,7 +112,7 @@ export const StoreAssistant: React.FC = () => {
         onClick={openAssistant}
         aria-label={isOpen ? 'Close store assistant' : 'Chat with store assistant'}
         aria-expanded={isOpen}
-        className="fixed bottom-24 left-4 z-40 flex h-14 w-14 items-center justify-center rounded-full border border-[#F3E5AB]/70 bg-gradient-to-br from-[#E5C158] to-[#B8860B] text-gray-950 shadow-[0_8px_28px_rgba(212,175,55,0.35)] transition-transform hover:scale-105 lg:bottom-6"
+        className="fixed bottom-24 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full border border-[#F3E5AB]/70 bg-gradient-to-br from-[#E5C158] to-[#B8860B] text-gray-950 shadow-[0_8px_28px_rgba(212,175,55,0.35)] transition-transform hover:scale-105 lg:bottom-6"
       >
         {isOpen ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
       </button>
@@ -120,7 +120,7 @@ export const StoreAssistant: React.FC = () => {
       {isOpen && (
         <section
           aria-label="AK MALA store assistant"
-          className="fixed bottom-40 left-4 z-40 flex h-[min(32rem,calc(100dvh-12rem))] w-[min(22rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-3xl border border-[#D4AF37]/50 bg-[#080d19] shadow-[0_20px_70px_rgba(0,0,0,0.75)] lg:bottom-24"
+          className="fixed bottom-40 right-4 z-40 flex h-[min(32rem,calc(100dvh-12rem))] w-[min(22rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-3xl border border-[#D4AF37]/50 bg-[#080d19] shadow-[0_20px_70px_rgba(0,0,0,0.75)] lg:bottom-24"
         >
           <header className="flex items-center gap-3 border-b border-[#D4AF37]/25 bg-[#0b1222] px-4 py-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#D4AF37]/15 text-[#E5C158]">
