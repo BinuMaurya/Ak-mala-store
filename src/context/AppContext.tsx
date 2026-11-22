@@ -510,8 +510,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const clearGallery = () => {
-    setGalleryItems(initialGalleryItems);
-    showNotification('Gallery reset to initial collection.');
+    setGalleryItems([]);
+    showNotification('All gallery photos and videos removed.');
   };
 
   const addVideoItem = (v: VideoItem) => {
