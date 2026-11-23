@@ -60,9 +60,7 @@ const galleryCategories: MediaItem['category'][] = [
   'varmala_wedding'
 ];
 const ADMIN_SESSION_STORAGE_KEY = 'ak_mala_admin_token';
-const FALLBACK_ADMIN_CODE = String(
-  (import.meta.env as Record<string, string | undefined>).VITE_ADMIN_CODE || ''
-).trim();
+const ADMIN_CODE = ((import.meta.env as Record<string, string | undefined>).ADMIN_CODE ?? '').trim();
 
 function escapeCsv(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
