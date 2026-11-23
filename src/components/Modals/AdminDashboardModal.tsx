@@ -261,7 +261,7 @@ export const AdminDashboardModal: React.FC = () => {
         return;
       }
 
-      if (FALLBACK_ADMIN_CODE && cleanedCode === FALLBACK_ADMIN_CODE) {
+     if (ADMIN_CODE && cleanedCode === ADMIN_CODE) {
         try {
           window.sessionStorage.setItem(ADMIN_SESSION_STORAGE_KEY, cleanedCode);
         } catch {
