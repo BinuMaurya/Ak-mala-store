@@ -30,7 +30,7 @@ export const MediaGalleryPickerModal: React.FC<MediaGalleryPickerModalProps> = (
   onClose,
   onSelect,
   title = 'Select Media from Sacred Gallery',
-  subtitle = 'Choose from photos and videos uploaded to the store gallery',
+  subtitle = 'Choose from media currently listed in the store gallery',
   allowedType = 'all',
   currentSelectedUrl = ''
 }) => {
@@ -241,7 +241,7 @@ export const MediaGalleryPickerModal: React.FC<MediaGalleryPickerModalProps> = (
             <div className="py-16 text-center text-gray-400 space-y-3">
               <Layers className="w-10 h-10 text-amber-500/50 mx-auto" />
               <p className="text-sm font-semibold text-gray-200">No media items found</p>
-              <p className="text-xs">Upload genuine photos or videos in Media Studio, then return here to select them.</p>
+              <p className="text-xs">Add photos or videos in Media Studio, then return here to select them.</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
