@@ -12,8 +12,6 @@ const isProduction = process.env.NODE_ENV === 'production';
 const ADMIN_ACCESS_CODE = String(process.env.ADMIN_ACCESS_CODE || '').trim();
 const freeDeliveryThreshold = 999;
 const deliveryFee = 99;
-const festivalCouponCode = 'FEST15';
-const festivalDiscountPercent = 15;
 const maxCartItems = 50;
 
 class GatewayError extends Error {}
@@ -368,12 +366,17 @@ async function getOfferConfig(): Promise<OfferConfig> {
   const configuredDiscount = assets?.offerDiscountPercent;
   const configuredMinimum = assets?.offerMinOrder;
   const configuredDeliveryMinimum = assets?.freeDeliveryThreshold;
+  const code = typeof assets?.offerCode === 'string' ? assets.offerCode.trim() : '';
+  const discountPercent = typeof configuredDiscount === 'number' &&
+    Number.isFinite(configuredDiscount) &&
+    configuredDiscount >= 1 &&
+    configuredDiscount <= 90
+    ? configuredDiscount
+    : 0;
   return {
-    enabled: assets?.offerEnabled === undefined || assets.offerEnabled === true,
-    code: typeof assets?.offerCode === 'string' && assets.offerCode.trim() ? assets.offerCode.trim() : festivalCouponCode,
-    discountPercent: typeof configuredDiscount === 'number' && Number.isFinite(configuredDiscount) && configuredDiscount >= 1 && configuredDiscount <= 90
-      ? configuredDiscount
-      : festivalDiscountPercent,
+    enabled: assets?.offerEnabled === true && Boolean(code) && discountPercent > 0,
+    code,
+    discountPercent,
     minOrder: typeof configuredMinimum === 'number' && Number.isSafeInteger(configuredMinimum) && configuredMinimum >= 0
       ? configuredMinimum
       : 0,
@@ -680,17 +683,19 @@ function presentReview(review: StoredReview) {
 async function verifyReviewPurchase(orderNumber: string, phone: string, productId: string) {
   const orders = await supabaseRequest<Array<Pick<
     StoredOrder,
-    'id' | 'order_number' | 'phone' | 'email' | 'customer_name' | 'shipping_address' | 'items' | 'payment_method' | 'payment_status'
+    'id' | 'order_number' | 'phone' | 'email' | 'customer_name' | 'shipping_address' | 'items' | 'payment_method' | 'payment_status' | 'order_status'
   >>>(
-    `orders?order_number=eq.${encodeURIComponent(orderNumber)}&select=id,order_number,phone,email,customer_name,shipping_address,items,payment_method,payment_status&limit=1`,
+    `orders?order_number=eq.${encodeURIComponent(orderNumber)}&select=id,order_number,phone,email,customer_name,shipping_address,items,payment_method,payment_status,order_status&limit=1`,
     'GET'
   );
   const order = orders[0];
   if (!order || order.phone.replace(/\D/g, '') !== phone) {
     throw new ReviewVerificationError('Order number and phone do not match a purchase.');
   }
-  if (order.payment_status !== 'paid' && order.payment_method !== 'cod') {
-    throw new ReviewVerificationError('Only confirmed purchases can be reviewed.');
+  const isPaidOrder = order.payment_status === 'paid';
+  const isDeliveredCodOrder = order.payment_method === 'cod' && order.order_status === 'delivered';
+  if (!isPaidOrder && !isDeliveredCodOrder) {
+    throw new ReviewVerificationError('Only paid orders or delivered cash-on-delivery orders can be reviewed.');
   }
   if (!order.items.some((item) => item.productId === productId)) {
     throw new ReviewVerificationError('This product is not on the verified order.');
