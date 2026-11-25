@@ -124,7 +124,7 @@ export const BottomGridSection: React.FC = () => {
                         <h5 className="text-xs font-bold text-white">{review.author}</h5>
                         <p className="text-[10px] text-gray-400">{review.title}</p>
                       </div>
-                      <span className="text-[9px] text-emerald-300 whitespace-nowrap">Verified purchase</span>
+                      {review.verifiedDevotee === true && <span className="text-[9px] text-emerald-300 whitespace-nowrap">Verified purchase</span>}
                     </div>
                     <div className="flex items-center text-amber-400 mt-1">
                       {[1, 2, 3, 4, 5].map((star) => (
