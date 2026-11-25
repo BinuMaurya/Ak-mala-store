@@ -93,13 +93,13 @@ export const GallerySection: React.FC = () => {
           <div>
             <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold uppercase tracking-wider mb-2">
               <Sparkles className="w-3.5 h-3.5 text-[#E5C158]" />
-              <span>Customer & Store Media</span>
+              <span>Store Photo & Video Gallery</span>
             </div>
             <h2 className="font-cinzel text-3xl sm:text-4xl font-extrabold text-white">
               Photo & Video Gallery
             </h2>
             <p className="font-playfair italic text-xs sm:text-sm text-amber-200/80 mt-1 max-w-2xl">
-              Browse photos and videos uploaded by customers or the store team. Only media actually added to the gallery appears here.
+              Browse the media currently listed in the store gallery. Check each item's details for its source and context.
             </p>
           </div>
 
@@ -196,7 +196,7 @@ export const GallerySection: React.FC = () => {
               {galleryItems.length === 0 ? 'No photos or videos have been uploaded yet' : 'No media found matching your filter'}
             </p>
             <p className="text-xs">
-              {galleryItems.length === 0 ? 'Customer and store photos will appear here after they are uploaded.' : 'Try selecting a different category or clear search query.'}
+              {galleryItems.length === 0 ? 'Photos and videos will appear here after they are added to the gallery.' : 'Try selecting a different category or clear search query.'}
             </p>
           </div>
         ) : (
