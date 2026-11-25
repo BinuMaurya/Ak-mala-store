@@ -411,7 +411,7 @@ export const AdminPanelModal: React.FC = () => {
           <div className="flex items-center gap-2">
             <button
               onClick={() => {
-                if (window.confirm('Reset all website images, videos, and offers back to original defaults?')) {
+                if (window.confirm('Reset design and offer settings only? Existing products and uploaded photos/videos will be preserved.')) {
                   resetToDefaults();
                 }
               }}
