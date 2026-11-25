@@ -18,7 +18,6 @@ import {
   Trash2,
   Edit2,
   RotateCcw,
-  Sparkles,
   CheckCircle2,
   Upload,
   Link,
@@ -206,25 +205,25 @@ export const AdminPanelModal: React.FC = () => {
   // New Gallery Item Form
   const [showAddGallery, setShowAddGallery] = useState(false);
   const [newGalleryItem, setNewGalleryItem] = useState({
-    title: 'Ganpati Sthapana Aarti Darshan',
+    title: '',
     type: 'image' as 'image' | 'video',
-    url: 'https://images.unsplash.com/photo-1596704017254-9b121068fb31?w=800&auto=format&fit=crop&q=80',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1596704017254-9b121068fb31?w=400&auto=format&fit=crop&q=80',
+    url: '',
+    thumbnailUrl: '',
     category: 'ganpati_darshan' as MediaItem['category'],
-    tags: ['Ganesha', 'Aarti', 'Darshan'],
-    location: 'Mumbai Pandal',
-    videoDuration: '2:15'
+    tags: [] as string[],
+    location: '',
+    videoDuration: ''
   });
 
   // New Video Item Form
   const [showAddVideo, setShowAddVideo] = useState(false);
   const [newVideo, setNewVideo] = useState<VideoItem>({
     id: `video-${Date.now()}`,
-    title: 'Divine Temple Aarti Live Darshan',
-    duration: '2:10',
-    image: 'https://images.unsplash.com/photo-1596704017254-9b121068fb31?w=400&auto=format&fit=crop&q=80',
-    videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-    category: 'Aarti'
+    title: '',
+    duration: '',
+    image: '',
+    videoUrl: '',
+    category: ''
   });
 
   if (!isAdminOpen || !isOwner) return null;
@@ -364,6 +363,10 @@ export const AdminPanelModal: React.FC = () => {
 
   const handleCreateGalleryItem = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newGalleryItem.title.trim() || !newGalleryItem.url.trim()) {
+      showNotification('Add a title and upload or select a real photo/video before saving.');
+      return;
+    }
     addGalleryItem({
       title: newGalleryItem.title,
       type: newGalleryItem.type,
@@ -379,6 +382,10 @@ export const AdminPanelModal: React.FC = () => {
 
   const handleCreateVideo = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newVideo.title.trim() || !newVideo.videoUrl?.trim() || !newVideo.image.trim()) {
+      showNotification('Add a video file or URL and a real thumbnail before saving.');
+      return;
+    }
     addVideoItem(newVideo);
     setShowAddVideo(false);
   };
