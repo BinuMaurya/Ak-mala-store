@@ -56,7 +56,6 @@ export const AdminPanelModal: React.FC = () => {
     addGalleryItem,
     updateGalleryItem,
     deleteGalleryItem,
-    bulkSeed1000Items,
     clearGallery,
     videosList,
     addVideoItem,
@@ -1274,7 +1273,7 @@ export const AdminPanelModal: React.FC = () => {
                         {' · '}{review.author}{review.city ? ` · ${review.city}` : ''}
                       </p>
                     </div>
-                    <span className="text-[10px] text-emerald-300 whitespace-nowrap">Verified purchase</span>
+                    {review.verifiedDevotee === true && <span className="text-[10px] text-emerald-300 whitespace-nowrap">Verified purchase</span>}
                   </div>
                   <div className="flex gap-0.5 mt-2">
                     {[1, 2, 3, 4, 5].map((star) => (
@@ -1498,10 +1497,10 @@ export const AdminPanelModal: React.FC = () => {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h4 className="font-cinzel text-base font-bold text-white">
-                    1,000+ Media Gallery Manager (Currently {galleryItems.length} items)
+                    Media Gallery Manager (Currently {galleryItems.length} items)
                   </h4>
                   <p className="text-xs text-gray-400">
-                    Store and organize up to 1,000 sacred photos & videos of Ganpati darshan, temple pujas, and customers.
+                    Store and organize photos and videos actually uploaded by customers or the store team.
                   </p>
                 </div>
 
@@ -1521,14 +1520,6 @@ export const AdminPanelModal: React.FC = () => {
                   >
                     <Layers className="w-4 h-4" />
                     <span>Visual Picker Grid</span>
-                  </button>
-
-                  <button
-                    onClick={bulkSeed1000Items}
-                    className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-700/20 border border-amber-400/50 text-amber-300 font-bold text-xs flex items-center gap-1.5"
-                  >
-                    <Sparkles className="w-4 h-4" />
-                    <span>Generate 1,000 Items</span>
                   </button>
 
                   {galleryItems.length > 0 && (
