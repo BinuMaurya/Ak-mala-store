@@ -3,6 +3,7 @@ import type { SiteAssetsConfig } from '../types';
 export function isOfferActive(offer: SiteAssetsConfig, now = new Date()): boolean {
   if (
     offer.offerEnabled !== true ||
+    typeof offer.offerCode !== 'string' ||
     !offer.offerCode.trim() ||
     !Number.isFinite(offer.offerDiscountPercent) ||
     offer.offerDiscountPercent < 1 ||
