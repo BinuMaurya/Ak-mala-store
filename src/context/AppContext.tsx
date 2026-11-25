@@ -17,7 +17,7 @@ import {
 } from '../types';
 import { products } from '../data/products';
 import { translations } from '../data/translations';
-import { initialGalleryItems, generate1000GalleryItems } from '../data/gallerySeed';
+import { initialGalleryItems } from '../data/gallerySeed';
 import { trackEvent } from '../services/analytics';
 import { supabase } from '../services/supabase';
 import { isOfferActive } from '../utils/offers';
@@ -29,11 +29,11 @@ const defaultSiteAssets: SiteAssetsConfig = {
   heroGaneshaImage: '/ganpati_murti.png',
   heroHeadline: 'Divine Malas For',
   heroHeadlineHighlight: 'Every Blessing',
-  heroSubtitle: 'Handcrafted devotional flower garlands woven with pure fresh Dutch roses, fragrant Madurai mogra, and auspicious marigolds adorned with royal gold zari.',
-  offerBannerText: 'GANPATI FESTIVAL SPECIAL - FLAT 15% OFF ON ALL ORDERS',
-  offerCode: 'FEST15',
-  offerDiscountPercent: 15,
-  offerEnabled: true,
+  heroSubtitle: 'Explore devotional garlands in a variety of colors and designs. Check each product page for available sizes, prices, and product details.',
+  offerBannerText: '',
+  offerCode: '',
+  offerDiscountPercent: 0,
+  offerEnabled: false,
   offerStartDate: '',
   offerEndDate: '',
   offerMinOrder: 0,
@@ -42,32 +42,8 @@ const defaultSiteAssets: SiteAssetsConfig = {
   brandTagline: 'Pure Devotion. Premium Quality.'
 };
 
-const defaultVideos: VideoItem[] = [
-  {
-    id: 'unboxing-1',
-    title: 'Ganpati Bappa Sthapana Aarti & Garland Darshan',
-    duration: '1:42',
-    image: 'https://images.unsplash.com/photo-1596704017254-9b121068fb31?w=400&auto=format&fit=crop&q=80',
-    videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-    category: 'Aarti'
-  },
-  {
-    id: 'unboxing-2',
-    title: 'Madurai Mogra Garland Weaving by Master Artisan',
-    duration: '2:15',
-    image: 'https://images.unsplash.com/photo-1563245372-f21724e3856d?w=400&auto=format&fit=crop&q=80',
-    videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-    category: 'Handcraft'
-  },
-  {
-    id: 'unboxing-3',
-    title: 'Zero Wilting Cold-Chain Unboxing Test',
-    duration: '0:58',
-    image: 'https://images.unsplash.com/photo-1518895949257-7621c3c786d7?w=400&auto=format&fit=crop&q=80',
-    videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-    category: 'Unboxing'
-  }
-];
+const defaultVideos: VideoItem[] = [];
+
 
 interface AppContextType {
   // Products & filters (Dynamic & Admin Editable)
@@ -89,7 +65,6 @@ interface AppContextType {
   addGalleryItem: (item: Omit<MediaItem, 'id' | 'likes' | 'date'>) => void;
   updateGalleryItem: (id: string, updated: Partial<MediaItem>) => void;
   deleteGalleryItem: (id: string) => void;
-  bulkSeed1000Items: () => void;
   clearGallery: () => void;
 
   // Videos List (Admin Editable)
@@ -649,12 +624,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showNotification('Gallery item updated successfully!');
   };
 
-  const bulkSeed1000Items = () => {
-    const items = generate1000GalleryItems();
-    setGalleryItems(items);
-    showNotification('Generated 1,000+ Sacred Devotional Photos & Videos in Gallery!');
-  };
-
   const clearGallery = () => {
     setGalleryItems([]);
     showNotification('All gallery photos and videos removed.');
@@ -866,7 +835,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addGalleryItem,
         updateGalleryItem,
         deleteGalleryItem,
-        bulkSeed1000Items,
         clearGallery,
         videosList,
         addVideoItem,
