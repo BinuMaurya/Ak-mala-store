@@ -647,15 +647,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const resetToDefaults = () => {
-    localStorage.removeItem('ak_mala_products');
     localStorage.removeItem('ak_mala_site_assets');
-    localStorage.removeItem('ak_mala_gallery');
-    localStorage.removeItem('ak_mala_videos');
-    setAllProducts(products);
     setSiteAssets(defaultSiteAssets);
-    setGalleryItems(initialGalleryItems);
-    setVideosList(defaultVideos);
-    showNotification('All site media and products restored to default state.');
+    showNotification('Default design and offer settings restored. Existing products and uploaded photos/videos were preserved.');
   };
 
   // Cart operations
