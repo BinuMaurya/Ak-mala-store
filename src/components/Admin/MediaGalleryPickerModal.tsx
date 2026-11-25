@@ -8,7 +8,6 @@ import {
   Video,
   Check,
   CheckCircle2,
-  Sparkles,
   Layers,
   Filter,
   ExternalLink,
