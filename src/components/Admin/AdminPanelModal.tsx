@@ -1507,7 +1507,7 @@ export const AdminPanelModal: React.FC = () => {
                     Media Gallery Manager (Currently {galleryItems.length} items)
                   </h4>
                   <p className="text-xs text-gray-400">
-                    Store and organize photos and videos actually uploaded by customers or the store team.
+                    Store and organize photos and videos added to the gallery. Enter accurate titles and details for each item.
                   </p>
                 </div>
 
