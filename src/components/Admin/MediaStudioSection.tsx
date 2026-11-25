@@ -65,7 +65,7 @@ export const MediaStudioSection: React.FC<MediaStudioSectionProps> = ({
   const [uploadUrl, setUploadUrl] = useState('');
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadCategory, setUploadCategory] = useState<string>('ganpati_darshan');
-  const [uploadLocation, setUploadLocation] = useState('Mumbai Temple Pandal');
+  const [uploadLocation, setUploadLocation] = useState('');
   const [uploadDuration, setUploadDuration] = useState('2:15');
   const [uploadPrice, setUploadPrice] = useState(599);
   const [fileName, setFileName] = useState('');
@@ -117,17 +117,21 @@ export const MediaStudioSection: React.FC<MediaStudioSectionProps> = ({
       });
       showNotification('🕉️ Uploaded & dynamically synced with 3D Hero Ganpati Murti!');
     } else if (uploadTarget === 'gallery') {
+      if (!uploadTitle.trim()) {
+        showNotification('Add a clear title for this gallery upload before saving.');
+        return;
+      }
       addGalleryItem({
-        title: uploadTitle.trim() || 'Sacred Devotional Darshan',
+        title: uploadTitle.trim(),
         type: uploadMediaKind,
         url: uploadUrl,
         thumbnailUrl: uploadUrl,
         category: (uploadCategory as any) || 'ganpati_darshan',
-        tags: ['New Upload', 'Sacred', 'Darshan'],
-        location: uploadLocation || 'India',
+        tags: ['Store Upload'],
+        location: uploadLocation.trim() || undefined,
         videoDuration: uploadMediaKind === 'video' ? uploadDuration : undefined
       });
-      showNotification(`📷 Added "${uploadTitle || 'Media'}" to 1,000+ Gallery!`);
+      showNotification(`📷 Added "${uploadTitle.trim()}" to Photo & Video Gallery!`);
     } else if (uploadTarget === 'product') {
       const prodName = uploadTitle.trim() || 'Divine Swarna Mala';
       addProduct({
@@ -160,14 +164,18 @@ export const MediaStudioSection: React.FC<MediaStudioSectionProps> = ({
       });
       showNotification(`🌺 Created new product: "${prodName}"!`);
     } else if (uploadTarget === 'video') {
-      const vidTitle = uploadTitle.trim() || 'Temple Aarti Darshan Video';
+      if (!uploadTitle.trim()) {
+        showNotification('Add a clear title for this video before saving.');
+        return;
+      }
+      const vidTitle = uploadTitle.trim();
       addVideoItem({
         id: `video-${Date.now()}`,
         title: vidTitle,
-        duration: uploadDuration || '2:15',
+        duration: uploadDuration.trim(),
         image: uploadUrl,
         videoUrl: uploadUrl,
-        category: 'Aarti & Unboxing'
+        category: 'Store Video'
       });
       showNotification(`🎬 Added new video: "${vidTitle}"!`);
     }
