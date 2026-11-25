@@ -284,7 +284,7 @@ export const ProductDetailModal: React.FC = () => {
                     <p className="text-xs font-bold text-white">{review.title}</p>
                     <p className="text-[10px] text-gray-400 mt-0.5">{review.author}{review.city ? ` · ${review.city}` : ''}</p>
                   </div>
-                  <span className="text-[9px] text-emerald-300 whitespace-nowrap">Verified purchase</span>
+                  {review.verifiedDevotee === true && <span className="text-[9px] text-emerald-300 whitespace-nowrap">Verified purchase</span>}
                 </div>
                 <p className="text-xs text-gray-300 mt-2">{review.comment}</p>
                 {review.photoUrl && (
