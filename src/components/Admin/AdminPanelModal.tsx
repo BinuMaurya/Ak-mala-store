@@ -5,6 +5,13 @@ import { MediaGalleryPickerModal } from './MediaGalleryPickerModal';
 import { MediaStudioSection } from './MediaStudioSection';
 import { uploadStoreMediaWithAdminToken } from '../../services/mediaStorage';
 import { supabase } from '../../services/supabase';
+const PRODUCT_SIZE_OPTIONS: Product['availableSizes'] = [
+  { size: '16"', name: 'Small (16 inch)', extraPrice: 0 },
+  { size: '22"', name: 'Medium (22 inch)', extraPrice: 0 },
+  { size: '28"', name: 'Large (28 inch)', extraPrice: 0 },
+  { size: '36"', name: 'XL (36 inch)', extraPrice: 0 }
+];
+
 import {
   X,
   Settings,
@@ -195,31 +202,27 @@ export const AdminPanelModal: React.FC = () => {
   // New Product Form
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [newProd, setNewProd] = useState<Partial<Product>>({
-    name: 'Ashtavinayak Swarna Mala',
-    hindiName: 'अष्टविनायक स्वर्ण माला',
+    name: '',
+    hindiName: '',
+    marathiName: '',
     category: 'festive',
-    price: 699,
-    originalPrice: 999,
-    discountPercent: 30,
-    rating: 4.9,
-    reviewsCount: 42,
-    image: 'https://images.unsplash.com/photo-1596704017254-9b121068fb31?w=800&auto=format&fit=crop&q=80',
+    price: 0,
+    originalPrice: 0,
+    discountPercent: 0,
+    rating: 0,
+    reviewsCount: 0,
+    image: '',
     galleryImages: [],
-    tags: ['Best Seller', 'New Arrival'],
-    flowers: ['Dutch Red Rose', 'Madurai Mogra'],
-    description: 'Fresh divine garland woven with morning dawn plucked blooms and gold zari finish.',
-    hindiDescription: 'सुबह के ताजे फूलों और स्वर्ण जरी से निर्मित दिव्य हार।',
-    availableSizes: [
-      { size: '16"', name: 'Small (16 inch)', extraPrice: 0 },
-      { size: '22"', name: 'Medium (22 inch)', extraPrice: 120 },
-      { size: '28"', name: 'Large (28 inch)', extraPrice: 250 },
-      { size: '36"', name: 'XL (36 inch)', extraPrice: 450 }
-    ],
-    freshnessHours: 72,
-    inStock: true,
-    stockQuantity: 10,
-    fragranceLevel: 'Divine Sacred',
-    bestForDeity: 'Ganpati Bappa'
+    tags: [],
+    flowers: [],
+    description: '',
+    hindiDescription: '',
+    availableSizes: [],
+    freshnessHours: 0,
+    inStock: false,
+    stockQuantity: 0,
+    fragranceLevel: 'Subtle',
+    bestForDeity: ''
   });
 
   // New Gallery Item Form
@@ -365,14 +368,44 @@ export const AdminPanelModal: React.FC = () => {
 
   const handleCreateProduct = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newProd.name || !newProd.price) return;
+    const name = newProd.name?.trim() || '';
+    const price = Number(newProd.price);
+    const originalPriceInput = Number(newProd.originalPrice ?? 0);
     const stockQuantity = Number(newProd.stockQuantity ?? 0);
+
+    if (!name || !Number.isSafeInteger(price) || price < 1) {
+      showNotification('Enter the actual product name and a valid selling price.');
+      return;
+    }
+    if (!newProd.image?.trim() || !newProd.description?.trim()) {
+      showNotification('Add the real product photo and an accurate description before publishing.');
+      return;
+    }
+    if (!newProd.availableSizes?.length) {
+      showNotification('Select at least one size that is actually available.');
+      return;
+    }
     if (!Number.isSafeInteger(stockQuantity) || stockQuantity < 0) {
       showNotification('Stock quantity must be a whole number equal to or above zero.');
       return;
     }
+    if (!Number.isSafeInteger(originalPriceInput) || originalPriceInput < 0 || (originalPriceInput > 0 && originalPriceInput < price)) {
+      showNotification('Original price must be blank/zero or at least the selling price.');
+      return;
+    }
+
+    const originalPrice = originalPriceInput > 0 ? originalPriceInput : price;
+    const discountPercent = originalPrice > price
+      ? Math.round(((originalPrice - price) / originalPrice) * 100)
+      : 0;
     const finalProduct: Product = {
       ...newProd,
+      name,
+      price,
+      originalPrice,
+      discountPercent,
+      rating: 0,
+      reviewsCount: 0,
       stockQuantity,
       inStock: stockQuantity > 0,
       id: `mala-${Date.now()}`
@@ -906,6 +939,54 @@ export const AdminPanelModal: React.FC = () => {
                         onChange={(e) => setNewProd({ ...newProd, stockQuantity: Number(e.target.value) })}
                         className="w-full p-2.5 rounded-xl bg-black/60 border border-white/20 text-white"
                       />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-gray-300 font-bold block">Available sizes (select only sizes you can fulfil):</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {PRODUCT_SIZE_OPTIONS.map((sizeOption) => {
+                        const currentSizes = newProd.availableSizes || [];
+                        const selectedSize = currentSizes.find((item) => item.size === sizeOption.size);
+                        return (
+                          <div key={sizeOption.size} className="rounded-xl border border-white/10 bg-black/30 p-2.5">
+                            <label className="flex items-center gap-2 text-gray-200">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(selectedSize)}
+                                onChange={(event) => {
+                                  const nextSizes = event.target.checked
+                                    ? [...currentSizes, { ...sizeOption, extraPrice: 0 }]
+                                    : currentSizes.filter((item) => item.size !== sizeOption.size);
+                                  setNewProd({ ...newProd, availableSizes: nextSizes });
+                                }}
+                              />
+                              <span>{sizeOption.name}</span>
+                            </label>
+                            {selectedSize && (
+                              <label className="mt-2 flex items-center gap-2 text-[11px] text-gray-400">
+                                Extra price (₹)
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={1}
+                                  value={selectedSize.extraPrice}
+                                  onChange={(event) => {
+                                    const extraPrice = Math.max(0, Math.floor(Number(event.target.value) || 0));
+                                    setNewProd({
+                                      ...newProd,
+                                      availableSizes: currentSizes.map((item) =>
+                                        item.size === sizeOption.size ? { ...item, extraPrice } : item
+                                      )
+                                    });
+                                  }}
+                                  className="w-24 rounded-lg border border-white/15 bg-black/50 p-1.5 text-white"
+                                />
+                              </label>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
 
