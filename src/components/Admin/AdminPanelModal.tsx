@@ -5,13 +5,6 @@ import { MediaGalleryPickerModal } from './MediaGalleryPickerModal';
 import { MediaStudioSection } from './MediaStudioSection';
 import { uploadStoreMediaWithAdminToken } from '../../services/mediaStorage';
 import { supabase } from '../../services/supabase';
-const PRODUCT_SIZE_OPTIONS: Product['availableSizes'] = [
-  { size: '16"', name: 'Small (16 inch)', extraPrice: 0 },
-  { size: '22"', name: 'Medium (22 inch)', extraPrice: 0 },
-  { size: '28"', name: 'Large (28 inch)', extraPrice: 0 },
-  { size: '36"', name: 'XL (36 inch)', extraPrice: 0 }
-];
-
 import {
   X,
   Settings,
@@ -45,6 +38,13 @@ import {
   XCircle,
   PackageCheck
 } from 'lucide-react';
+
+const PRODUCT_SIZE_OPTIONS: Product['availableSizes'] = [
+  { size: '16"', name: 'Small (16 inch)', extraPrice: 0 },
+  { size: '22"', name: 'Medium (22 inch)', extraPrice: 0 },
+  { size: '28"', name: 'Large (28 inch)', extraPrice: 0 },
+  { size: '36"', name: 'XL (36 inch)', extraPrice: 0 }
+];
 
 export const AdminPanelModal: React.FC = () => {
   const {
