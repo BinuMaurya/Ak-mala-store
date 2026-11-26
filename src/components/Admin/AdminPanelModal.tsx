@@ -3,7 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { Product, MediaItem, VideoItem, Review } from '../../types';
 import { MediaGalleryPickerModal } from './MediaGalleryPickerModal';
 import { MediaStudioSection } from './MediaStudioSection';
-import { uploadStoreMedia } from '../../services/mediaStorage';
+import { uploadStoreMediaWithAdminToken } from '../../services/mediaStorage';
 import { supabase } from '../../services/supabase';
 import {
   X,
@@ -101,12 +101,32 @@ export const AdminPanelModal: React.FC = () => {
     onComplete: (mediaUrl: string) => void
   ) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
-    void uploadStoreMedia(file)
-      .then(onComplete)
-      .catch((error: unknown) => {
-        showNotification(error instanceof Error ? error.message : 'Media upload failed.');
-      });
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'video/mp4', 'video/webm'];
+    if (!allowedTypes.includes(file.type)) {
+      showNotification('Choose JPG, PNG, WEBP, AVIF, MP4, or WEBM media.');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      showNotification('Media files must be 10 MB or smaller.');
+      return;
+    }
+
+    void (async () => {
+      let token = adminAccessToken;
+      if (!token && isOwner && supabase) {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        token = data.session?.access_token || null;
+      }
+      if (!token) throw new Error('Owner session expired. Please unlock the admin panel again.');
+      const mediaUrl = await uploadStoreMediaWithAdminToken(file, token);
+      onComplete(mediaUrl);
+    })().catch((error: unknown) => {
+      showNotification(error instanceof Error ? error.message : 'Media upload failed.');
+    });
   };
 
   // Media Gallery Picker Modal state
