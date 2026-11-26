@@ -11,7 +11,7 @@ import { VoiceShoppingGuide } from './components/VoiceShoppingGuide';
 
 // Lazy loading all major homepage sections & heavy components
 const Hero = lazy(() =>
-  import('./components/Hero').then((module) => ({ default: module.Hero }))
+  import('./components/Hero3D').then((module) => ({ default: module.Hero3D }))
 );
 const CategoryExplorer = lazy(() =>
   import('./components/CategoryExplorer').then((module) => ({ default: module.CategoryExplorer }))
