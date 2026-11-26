@@ -692,10 +692,10 @@ async function verifyReviewPurchase(orderNumber: string, phone: string, productI
   if (!order || order.phone.replace(/\D/g, '') !== phone) {
     throw new ReviewVerificationError('Order number and phone do not match a purchase.');
   }
-  const isPaidOrder = order.payment_status === 'paid';
-  const isDeliveredCodOrder = order.payment_method === 'cod' && order.order_status === 'delivered';
-  if (!isPaidOrder && !isDeliveredCodOrder) {
-    throw new ReviewVerificationError('Only paid orders or delivered cash-on-delivery orders can be reviewed.');
+  const isDelivered = order.order_status === 'delivered';
+  const isEligiblePayment = order.payment_method === 'cod' || order.payment_status === 'paid';
+  if (!isDelivered || !isEligiblePayment) {
+    throw new ReviewVerificationError('Only delivered orders can be reviewed. Online orders must also be paid.');
   }
   if (!order.items.some((item) => item.productId === productId)) {
     throw new ReviewVerificationError('This product is not on the verified order.');
@@ -907,11 +907,15 @@ app.post('/api/admin/media/upload-url', async (request: Request, response: Respo
     const contentType = body.contentType;
     const size = body.size;
     const extensionByType: Record<string, string> = {
-      'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif',
-      'video/mp4': '.mp4', 'video/webm': '.webm', 'video/quicktime': '.mov'
+      'image/jpeg': '.jpg',
+      'image/png': '.png',
+      'image/webp': '.webp',
+      'image/avif': '.avif',
+      'video/mp4': '.mp4',
+      'video/webm': '.webm'
     };
-    if (typeof contentType !== 'string' || !extensionByType[contentType] || typeof size !== 'number' || size < 1 || size > 50 * 1024 * 1024) {
-      response.status(400).json({ error: 'Choose a supported image or video smaller than 50 MB.' });
+    if (typeof contentType !== 'string' || !extensionByType[contentType] || typeof size !== 'number' || size < 1 || size > 10 * 1024 * 1024) {
+      response.status(400).json({ error: 'Choose a supported JPG, PNG, WEBP, AVIF, MP4, or WEBM file smaller than 10 MB.' });
       return;
     }
 
