@@ -70,7 +70,7 @@ export const MediaStudioSection: React.FC<MediaStudioSectionProps> = ({
   const [uploadCategory, setUploadCategory] = useState<string>('ganpati_darshan');
   const [uploadLocation, setUploadLocation] = useState('');
   const [uploadDuration, setUploadDuration] = useState('2:15');
-  const [uploadPrice, setUploadPrice] = useState(599);
+  const [uploadPrice, setUploadPrice] = useState(0);
   const [fileName, setFileName] = useState('');
   const [isUploadingMedia, setIsUploadingMedia] = useState(false);
 
@@ -140,6 +140,10 @@ export const MediaStudioSection: React.FC<MediaStudioSectionProps> = ({
       showNotification('Please upload a file or enter an image/video URL first!');
       return;
     }
+    if (uploadTarget === 'product' && (!uploadTitle.trim() || !Number.isSafeInteger(uploadPrice) || uploadPrice < 1)) {
+      showNotification('Enter the real product name and selling price before creating a product.');
+      return;
+    }
 
     if (uploadTarget === 'murti') {
       updateSiteAssets({
@@ -164,34 +168,30 @@ export const MediaStudioSection: React.FC<MediaStudioSectionProps> = ({
       });
       showNotification(`📷 Added "${uploadTitle.trim()}" to Photo & Video Gallery!`);
     } else if (uploadTarget === 'product') {
-      const prodName = uploadTitle.trim() || 'Divine Swarna Mala';
+      const prodName = uploadTitle.trim();
       addProduct({
         id: `mala-${Date.now()}`,
         name: prodName,
         hindiName: `${prodName} माला`,
         marathiName: `${prodName} माळ`,
-        category: (uploadCategory as any) || 'festive',
-        price: uploadPrice || 599,
-        originalPrice: Math.round((uploadPrice || 599) * 1.35),
-        discountPercent: 25,
-        rating: 4.9,
-        reviewsCount: 1,
+        category: uploadCategory as Product['category'],
+        price: uploadPrice,
+        originalPrice: uploadPrice,
+        discountPercent: 0,
+        rating: 0,
+        reviewsCount: 0,
         image: uploadUrl,
         galleryImages: [uploadUrl],
-        tags: ['New Arrival', 'Handcrafted'],
-        flowers: ['Fresh Morning Blooms'],
-        description: 'Pristine divine garland lovingly handwoven for worship.',
-        hindiDescription: 'विशेष पूजा हेतु प्रातःकाल के ताजे पवित्र पुष्पों से निर्मित माला।',
-        availableSizes: [
-          { size: '16"', name: 'Small (16")', extraPrice: 0 },
-          { size: '22"', name: 'Medium (22")', extraPrice: 120 },
-          { size: '28"', name: 'Large (28")', extraPrice: 250 },
-          { size: '36"', name: 'XL (36")', extraPrice: 450 }
-        ],
-        freshnessHours: 72,
-        inStock: true,
-        fragranceLevel: 'Divine Sacred',
-        bestForDeity: 'Ganpati Bappa'
+        tags: [],
+        flowers: [],
+        description: 'Product details must be completed by the store owner before the item is available.',
+        hindiDescription: 'उत्पाद उपलब्ध होने से पहले स्टोर मालिक को सही विवरण जोड़ना होगा।',
+        availableSizes: [{ size: '16"', name: 'Size to be confirmed', extraPrice: 0 }],
+        freshnessHours: 0,
+        inStock: false,
+        stockQuantity: 0,
+        fragranceLevel: 'Subtle',
+        bestForDeity: 'Not specified'
       });
       showNotification(`🌺 Created new product: "${prodName}"!`);
     } else if (uploadTarget === 'video') {
@@ -403,7 +403,9 @@ export const MediaStudioSection: React.FC<MediaStudioSectionProps> = ({
                       type="button"
                       key={target.id}
                       onClick={() => {
-                        setUploadTarget(target.id as any);
+                                        setUploadTarget(target.id as any);
+                        if (target.id === 'product') setUploadCategory('festive');
+                        else if (target.id === 'gallery') setUploadCategory('ganpati_darshan');
                         if (target.id === 'video') setUploadMediaKind('video');
                         else setUploadMediaKind('image');
                       }}
@@ -570,9 +572,14 @@ export const MediaStudioSection: React.FC<MediaStudioSectionProps> = ({
                     onChange={(e) => setUploadCategory(e.target.value)}
                     className="w-full p-2.5 rounded-xl bg-black/60 border border-white/20 text-white text-xs"
                   >
-                    <option value="festive">Festive Garland</option>
-                    <option value="traditional">Traditional Mala</option>
-                    <option value="premium">Premium Devotional</option>
+                    <option value="rose">Rose Mala</option>
+                    <option value="mogra">Mogra Mala</option>
+                    <option value="marigold">Marigold Mala</option>
+                    <option value="orchid">Orchid Mala</option>
+                    <option value="tulsi">Tulsi Mala</option>
+                    <option value="temple">Temple Mala</option>
+                    <option value="wedding">Wedding Mala</option>
+                    <option value="festive">Festive Mala</option>
                   </select>
                 </div>
               </div>
