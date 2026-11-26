@@ -175,10 +175,12 @@ export const BestSellers: React.FC = () => {
                       <span className="text-gray-400 text-[11px]">({reviewSummary?.reviewCount || 0} reviews)</span>
                     </div>
 
-                    <div className="flex items-center gap-1 text-[11px] text-emerald-400">
-                      <Clock className="w-3 h-3" />
-                      <span>{product.freshnessHours}h Freshness</span>
-                    </div>
+                    {product.freshnessHours > 0 && (
+                      <div className="flex items-center gap-1 text-[11px] text-emerald-400">
+                        <Clock className="w-3 h-3" />
+                        <span>{product.freshnessHours}h Freshness</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Title & Flora Subtitle */}
