@@ -1,0 +1,1 @@
+TRUNCATE TABLE supabase_migrations.schema_migrations RESTART IDENTITY;
