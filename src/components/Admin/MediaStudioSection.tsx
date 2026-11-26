@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { MediaItem, Product, VideoItem } from '../../types';
-import { uploadStoreMedia } from '../../services/mediaStorage';
+import { uploadStoreMediaWithAdminToken } from '../../services/mediaStorage';
+import { supabase } from '../../services/supabase';
 import {
   Upload,
   RefreshCw,
@@ -40,6 +41,8 @@ export const MediaStudioSection: React.FC<MediaStudioSectionProps> = ({
 }) => {
   const {
     siteAssets,
+    adminAccessToken,
+    isOwner,
     updateSiteAssets,
     galleryItems,
     addGalleryItem,
@@ -87,15 +90,43 @@ export const MediaStudioSection: React.FC<MediaStudioSectionProps> = ({
     onComplete: (mediaUrl: string, file: File) => void
   ) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
-    setFileName(file.name);
-    const isVid = file.type.startsWith('video');
-    if (isVid) {
-      setUploadMediaKind('video');
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'video/mp4', 'video/webm'];
+    const isVid = file.type === 'video/mp4' || file.type === 'video/webm';
+    if (!allowedTypes.includes(file.type)) {
+      showNotification('Choose JPG, PNG, WEBP, AVIF, MP4, or WEBM media.');
+      return;
     }
+    if (file.size > 10 * 1024 * 1024) {
+      showNotification('Media files must be 10 MB or smaller.');
+      return;
+    }
+    if ((uploadTarget === 'murti' || uploadTarget === 'product') && isVid) {
+      showNotification('Choose an image for a murti or product photo.');
+      return;
+    }
+    if (uploadTarget === 'video' && !isVid) {
+      showNotification('Choose an MP4 or WEBM file for a video clip.');
+      return;
+    }
+
+    setFileName(file.name);
+    if (isVid) setUploadMediaKind('video');
+    else setUploadMediaKind('image');
     setIsUploadingMedia(true);
-    void uploadStoreMedia(file)
-      .then((mediaUrl) => onComplete(mediaUrl, file))
+    void (async () => {
+      let token = adminAccessToken;
+      if (!token && isOwner && supabase) {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        token = data.session?.access_token || null;
+      }
+      if (!token) throw new Error('Owner session expired. Please unlock the admin panel again.');
+      const mediaUrl = await uploadStoreMediaWithAdminToken(file, token);
+      onComplete(mediaUrl, file);
+    })()
       .catch((error: unknown) => {
         showNotification(error instanceof Error ? error.message : 'Media upload failed.');
       })
