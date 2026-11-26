@@ -232,13 +232,17 @@ export const BestSellers: React.FC = () => {
                         <span className="text-lg font-black text-[#F3E5AB]">
                           ₹{calculatedPrice}
                         </span>
-                        <span className="text-xs text-gray-500 line-through">
-                          ₹{calculatedOriginal}
-                        </span>
+                        {product.discountPercent > 0 && calculatedOriginal > calculatedPrice && (
+                          <span className="text-xs text-gray-500 line-through">
+                            ₹{calculatedOriginal}
+                          </span>
+                        )}
                       </div>
-                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                        {product.discountPercent}% OFF
-                      </span>
+                      {product.discountPercent > 0 && (
+                        <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                          {product.discountPercent}% OFF
+                        </span>
+                      )}
                     </div>
 
                     <button
