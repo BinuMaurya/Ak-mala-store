@@ -3,7 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { Product, MediaItem, VideoItem, Review } from '../../types';
 import { MediaGalleryPickerModal } from './MediaGalleryPickerModal';
 import { MediaStudioSection } from './MediaStudioSection';
-import { uploadStoreMedia } from '../../services/mediaStorage';
+import { uploadStoreMediaWithAdminToken } from '../../services/mediaStorage';
 import { supabase } from '../../services/supabase';
 import {
   X,
@@ -18,7 +18,6 @@ import {
   Trash2,
   Edit2,
   RotateCcw,
-  Sparkles,
   CheckCircle2,
   Upload,
   Link,
@@ -40,6 +39,13 @@ import {
   PackageCheck
 } from 'lucide-react';
 
+const PRODUCT_SIZE_OPTIONS: Product['availableSizes'] = [
+  { size: '16"', name: 'Small (16 inch)', extraPrice: 0 },
+  { size: '22"', name: 'Medium (22 inch)', extraPrice: 0 },
+  { size: '28"', name: 'Large (28 inch)', extraPrice: 0 },
+  { size: '36"', name: 'XL (36 inch)', extraPrice: 0 }
+];
+
 export const AdminPanelModal: React.FC = () => {
   const {
     isAdminOpen,
@@ -56,7 +62,6 @@ export const AdminPanelModal: React.FC = () => {
     addGalleryItem,
     updateGalleryItem,
     deleteGalleryItem,
-    bulkSeed1000Items,
     clearGallery,
     videosList,
     addVideoItem,
@@ -103,12 +108,32 @@ export const AdminPanelModal: React.FC = () => {
     onComplete: (mediaUrl: string) => void
   ) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
-    void uploadStoreMedia(file)
-      .then(onComplete)
-      .catch((error: unknown) => {
-        showNotification(error instanceof Error ? error.message : 'Media upload failed.');
-      });
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'video/mp4', 'video/webm'];
+    if (!allowedTypes.includes(file.type)) {
+      showNotification('Choose JPG, PNG, WEBP, AVIF, MP4, or WEBM media.');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      showNotification('Media files must be 10 MB or smaller.');
+      return;
+    }
+
+    void (async () => {
+      let token = adminAccessToken;
+      if (!token && isOwner && supabase) {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        token = data.session?.access_token || null;
+      }
+      if (!token) throw new Error('Owner session expired. Please unlock the admin panel again.');
+      const mediaUrl = await uploadStoreMediaWithAdminToken(file, token);
+      onComplete(mediaUrl);
+    })().catch((error: unknown) => {
+      showNotification(error instanceof Error ? error.message : 'Media upload failed.');
+    });
   };
 
   // Media Gallery Picker Modal state
@@ -177,55 +202,51 @@ export const AdminPanelModal: React.FC = () => {
   // New Product Form
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [newProd, setNewProd] = useState<Partial<Product>>({
-    name: 'Ashtavinayak Swarna Mala',
-    hindiName: 'अष्टविनायक स्वर्ण माला',
+    name: '',
+    hindiName: '',
+    marathiName: '',
     category: 'festive',
-    price: 699,
-    originalPrice: 999,
-    discountPercent: 30,
-    rating: 4.9,
-    reviewsCount: 42,
-    image: 'https://images.unsplash.com/photo-1596704017254-9b121068fb31?w=800&auto=format&fit=crop&q=80',
+    price: 0,
+    originalPrice: 0,
+    discountPercent: 0,
+    rating: 0,
+    reviewsCount: 0,
+    image: '',
     galleryImages: [],
-    tags: ['Best Seller', 'New Arrival'],
-    flowers: ['Dutch Red Rose', 'Madurai Mogra'],
-    description: 'Fresh divine garland woven with morning dawn plucked blooms and gold zari finish.',
-    hindiDescription: 'सुबह के ताजे फूलों और स्वर्ण जरी से निर्मित दिव्य हार।',
-    availableSizes: [
-      { size: '16"', name: 'Small (16 inch)', extraPrice: 0 },
-      { size: '22"', name: 'Medium (22 inch)', extraPrice: 120 },
-      { size: '28"', name: 'Large (28 inch)', extraPrice: 250 },
-      { size: '36"', name: 'XL (36 inch)', extraPrice: 450 }
-    ],
-    freshnessHours: 72,
-    inStock: true,
-    stockQuantity: 10,
-    fragranceLevel: 'Divine Sacred',
-    bestForDeity: 'Ganpati Bappa'
+    tags: [],
+    flowers: [],
+    description: '',
+    hindiDescription: '',
+    availableSizes: [],
+    freshnessHours: 0,
+    inStock: false,
+    stockQuantity: 0,
+    fragranceLevel: 'Subtle',
+    bestForDeity: ''
   });
 
   // New Gallery Item Form
   const [showAddGallery, setShowAddGallery] = useState(false);
   const [newGalleryItem, setNewGalleryItem] = useState({
-    title: 'Ganpati Sthapana Aarti Darshan',
+    title: '',
     type: 'image' as 'image' | 'video',
-    url: 'https://images.unsplash.com/photo-1596704017254-9b121068fb31?w=800&auto=format&fit=crop&q=80',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1596704017254-9b121068fb31?w=400&auto=format&fit=crop&q=80',
+    url: '',
+    thumbnailUrl: '',
     category: 'ganpati_darshan' as MediaItem['category'],
-    tags: ['Ganesha', 'Aarti', 'Darshan'],
-    location: 'Mumbai Pandal',
-    videoDuration: '2:15'
+    tags: [] as string[],
+    location: '',
+    videoDuration: ''
   });
 
   // New Video Item Form
   const [showAddVideo, setShowAddVideo] = useState(false);
   const [newVideo, setNewVideo] = useState<VideoItem>({
     id: `video-${Date.now()}`,
-    title: 'Divine Temple Aarti Live Darshan',
-    duration: '2:10',
-    image: 'https://images.unsplash.com/photo-1596704017254-9b121068fb31?w=400&auto=format&fit=crop&q=80',
-    videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-    category: 'Aarti'
+    title: '',
+    duration: '',
+    image: '',
+    videoUrl: '',
+    category: ''
   });
 
   if (!isAdminOpen || !isOwner) return null;
@@ -347,14 +368,44 @@ export const AdminPanelModal: React.FC = () => {
 
   const handleCreateProduct = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newProd.name || !newProd.price) return;
+    const name = newProd.name?.trim() || '';
+    const price = Number(newProd.price);
+    const originalPriceInput = Number(newProd.originalPrice ?? 0);
     const stockQuantity = Number(newProd.stockQuantity ?? 0);
+
+    if (!name || !Number.isSafeInteger(price) || price < 1) {
+      showNotification('Enter the actual product name and a valid selling price.');
+      return;
+    }
+    if (!newProd.image?.trim() || !newProd.description?.trim()) {
+      showNotification('Add the real product photo and an accurate description before publishing.');
+      return;
+    }
+    if (!newProd.availableSizes?.length) {
+      showNotification('Select at least one size that is actually available.');
+      return;
+    }
     if (!Number.isSafeInteger(stockQuantity) || stockQuantity < 0) {
       showNotification('Stock quantity must be a whole number equal to or above zero.');
       return;
     }
+    if (!Number.isSafeInteger(originalPriceInput) || originalPriceInput < 0 || (originalPriceInput > 0 && originalPriceInput < price)) {
+      showNotification('Original price must be blank/zero or at least the selling price.');
+      return;
+    }
+
+    const originalPrice = originalPriceInput > 0 ? originalPriceInput : price;
+    const discountPercent = originalPrice > price
+      ? Math.round(((originalPrice - price) / originalPrice) * 100)
+      : 0;
     const finalProduct: Product = {
       ...newProd,
+      name,
+      price,
+      originalPrice,
+      discountPercent,
+      rating: 0,
+      reviewsCount: 0,
       stockQuantity,
       inStock: stockQuantity > 0,
       id: `mala-${Date.now()}`
@@ -365,6 +416,10 @@ export const AdminPanelModal: React.FC = () => {
 
   const handleCreateGalleryItem = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newGalleryItem.title.trim() || !newGalleryItem.url.trim()) {
+      showNotification('Add a title and upload or select a real photo/video before saving.');
+      return;
+    }
     addGalleryItem({
       title: newGalleryItem.title,
       type: newGalleryItem.type,
@@ -380,6 +435,10 @@ export const AdminPanelModal: React.FC = () => {
 
   const handleCreateVideo = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newVideo.title.trim() || !newVideo.videoUrl?.trim() || !newVideo.image.trim()) {
+      showNotification('Add a video file or URL and a real thumbnail before saving.');
+      return;
+    }
     addVideoItem(newVideo);
     setShowAddVideo(false);
   };
@@ -412,7 +471,7 @@ export const AdminPanelModal: React.FC = () => {
           <div className="flex items-center gap-2">
             <button
               onClick={() => {
-                if (window.confirm('Reset all website images, videos, and offers back to original defaults?')) {
+                if (window.confirm('Reset design and offer settings only? Existing products and uploaded photos/videos will be preserved.')) {
                   resetToDefaults();
                 }
               }}
@@ -883,6 +942,54 @@ export const AdminPanelModal: React.FC = () => {
                     </div>
                   </div>
 
+                  <div className="space-y-2">
+                    <label className="text-gray-300 font-bold block">Available sizes (select only sizes you can fulfil):</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {PRODUCT_SIZE_OPTIONS.map((sizeOption) => {
+                        const currentSizes = newProd.availableSizes || [];
+                        const selectedSize = currentSizes.find((item) => item.size === sizeOption.size);
+                        return (
+                          <div key={sizeOption.size} className="rounded-xl border border-white/10 bg-black/30 p-2.5">
+                            <label className="flex items-center gap-2 text-gray-200">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(selectedSize)}
+                                onChange={(event) => {
+                                  const nextSizes = event.target.checked
+                                    ? [...currentSizes, { ...sizeOption, extraPrice: 0 }]
+                                    : currentSizes.filter((item) => item.size !== sizeOption.size);
+                                  setNewProd({ ...newProd, availableSizes: nextSizes });
+                                }}
+                              />
+                              <span>{sizeOption.name}</span>
+                            </label>
+                            {selectedSize && (
+                              <label className="mt-2 flex items-center gap-2 text-[11px] text-gray-400">
+                                Extra price (₹)
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={1}
+                                  value={selectedSize.extraPrice}
+                                  onChange={(event) => {
+                                    const extraPrice = Math.max(0, Math.floor(Number(event.target.value) || 0));
+                                    setNewProd({
+                                      ...newProd,
+                                      availableSizes: currentSizes.map((item) =>
+                                        item.size === sizeOption.size ? { ...item, extraPrice } : item
+                                      )
+                                    });
+                                  }}
+                                  className="w-24 rounded-lg border border-white/15 bg-black/50 p-1.5 text-white"
+                                />
+                              </label>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-gray-300 font-bold block">Mala Image URL:</label>
@@ -1274,7 +1381,7 @@ export const AdminPanelModal: React.FC = () => {
                         {' · '}{review.author}{review.city ? ` · ${review.city}` : ''}
                       </p>
                     </div>
-                    <span className="text-[10px] text-emerald-300 whitespace-nowrap">Verified purchase</span>
+                    {review.verifiedDevotee === true && <span className="text-[10px] text-emerald-300 whitespace-nowrap">Verified purchase</span>}
                   </div>
                   <div className="flex gap-0.5 mt-2">
                     {[1, 2, 3, 4, 5].map((star) => (
@@ -1498,10 +1605,10 @@ export const AdminPanelModal: React.FC = () => {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h4 className="font-cinzel text-base font-bold text-white">
-                    1,000+ Media Gallery Manager (Currently {galleryItems.length} items)
+                    Media Gallery Manager (Currently {galleryItems.length} items)
                   </h4>
                   <p className="text-xs text-gray-400">
-                    Store and organize up to 1,000 sacred photos & videos of Ganpati darshan, temple pujas, and customers.
+                    Store and organize photos and videos added to the gallery. Enter accurate titles and details for each item.
                   </p>
                 </div>
 
@@ -1521,14 +1628,6 @@ export const AdminPanelModal: React.FC = () => {
                   >
                     <Layers className="w-4 h-4" />
                     <span>Visual Picker Grid</span>
-                  </button>
-
-                  <button
-                    onClick={bulkSeed1000Items}
-                    className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-700/20 border border-amber-400/50 text-amber-300 font-bold text-xs flex items-center gap-1.5"
-                  >
-                    <Sparkles className="w-4 h-4" />
-                    <span>Generate 1,000 Items</span>
                   </button>
 
                   {galleryItems.length > 0 && (

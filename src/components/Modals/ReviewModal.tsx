@@ -83,8 +83,8 @@ export const ReviewModal: React.FC = () => {
       const result = await response.json() as { pendingApproval?: boolean; error?: string };
       if (!response.ok) throw new Error(result.error || 'Your review could not be submitted.');
       showNotification(result.pendingApproval
-        ? 'Verified review submitted. It will appear after admin approval.'
-        : 'Your verified review was submitted.');
+        ? 'Purchase details checked. Your review is awaiting admin approval.'
+        : 'Your review was submitted.');
       setOrderNumber('');
       setPhone('');
       setTitle('');
@@ -103,7 +103,7 @@ export const ReviewModal: React.FC = () => {
       <div className="relative w-full max-w-2xl bg-[#080d19] border-2 border-[#D4AF37]/50 rounded-3xl shadow-2xl overflow-hidden p-5 sm:p-6 max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
           <div>
-            <h3 className="font-cinzel text-base font-bold text-white">Verified Customer Reviews</h3>
+            <h3 className="font-cinzel text-base font-bold text-white">Customer Reviews</h3>
             <p className="text-[11px] text-gray-400 mt-1">Reviews appear publicly after purchase verification and moderation.</p>
           </div>
           <button
@@ -126,9 +126,11 @@ export const ReviewModal: React.FC = () => {
                   <p className="text-sm font-bold text-white">{review.title}</p>
                   <p className="text-xs text-gray-400 mt-1">{review.author}{review.city ? ` · ${review.city}` : ''}</p>
                 </div>
-                <span className="inline-flex items-center gap-1 text-[10px] text-emerald-300 whitespace-nowrap">
-                  <ShieldCheck className="w-3.5 h-3.5" /> Verified purchase
-                </span>
+                {review.verifiedDevotee === true && (
+                  <span className="inline-flex items-center gap-1 text-[10px] text-emerald-300 whitespace-nowrap">
+                    <ShieldCheck className="w-3.5 h-3.5" /> Verified purchase
+                  </span>
+                )}
               </div>
               <div className="flex gap-0.5 mt-2" aria-label={`${review.rating} out of 5 stars`}>
                 {[1, 2, 3, 4, 5].map((star) => (
@@ -236,7 +238,7 @@ export const ReviewModal: React.FC = () => {
             disabled={submitting}
             className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black font-extrabold text-xs uppercase tracking-wider shadow-lg hover:opacity-95 disabled:opacity-60"
           >
-            {submitting ? 'Submitting…' : <><CheckCircle2 className="w-4 h-4 inline mr-2" />Submit verified review</>}
+            {submitting ? 'Submitting…' : <><CheckCircle2 className="w-4 h-4 inline mr-2" />Submit review</>}
           </button>
         </form>
       </div>

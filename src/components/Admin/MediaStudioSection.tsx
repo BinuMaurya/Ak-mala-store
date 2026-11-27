@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { MediaItem, Product, VideoItem } from '../../types';
-import { uploadStoreMedia } from '../../services/mediaStorage';
+import { uploadStoreMediaWithAdminToken } from '../../services/mediaStorage';
+import { supabase } from '../../services/supabase';
 import {
   Upload,
   RefreshCw,
@@ -40,6 +41,8 @@ export const MediaStudioSection: React.FC<MediaStudioSectionProps> = ({
 }) => {
   const {
     siteAssets,
+    adminAccessToken,
+    isOwner,
     updateSiteAssets,
     galleryItems,
     addGalleryItem,
@@ -65,9 +68,9 @@ export const MediaStudioSection: React.FC<MediaStudioSectionProps> = ({
   const [uploadUrl, setUploadUrl] = useState('');
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadCategory, setUploadCategory] = useState<string>('ganpati_darshan');
-  const [uploadLocation, setUploadLocation] = useState('Mumbai Temple Pandal');
+  const [uploadLocation, setUploadLocation] = useState('');
   const [uploadDuration, setUploadDuration] = useState('2:15');
-  const [uploadPrice, setUploadPrice] = useState(599);
+  const [uploadPrice, setUploadPrice] = useState(0);
   const [fileName, setFileName] = useState('');
   const [isUploadingMedia, setIsUploadingMedia] = useState(false);
 
@@ -87,15 +90,43 @@ export const MediaStudioSection: React.FC<MediaStudioSectionProps> = ({
     onComplete: (mediaUrl: string, file: File) => void
   ) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
-    setFileName(file.name);
-    const isVid = file.type.startsWith('video');
-    if (isVid) {
-      setUploadMediaKind('video');
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'video/mp4', 'video/webm'];
+    const isVid = file.type === 'video/mp4' || file.type === 'video/webm';
+    if (!allowedTypes.includes(file.type)) {
+      showNotification('Choose JPG, PNG, WEBP, AVIF, MP4, or WEBM media.');
+      return;
     }
+    if (file.size > 10 * 1024 * 1024) {
+      showNotification('Media files must be 10 MB or smaller.');
+      return;
+    }
+    if ((uploadTarget === 'murti' || uploadTarget === 'product') && isVid) {
+      showNotification('Choose an image for a murti or product photo.');
+      return;
+    }
+    if (uploadTarget === 'video' && !isVid) {
+      showNotification('Choose an MP4 or WEBM file for a video clip.');
+      return;
+    }
+
+    setFileName(file.name);
+    if (isVid) setUploadMediaKind('video');
+    else setUploadMediaKind('image');
     setIsUploadingMedia(true);
-    void uploadStoreMedia(file)
-      .then((mediaUrl) => onComplete(mediaUrl, file))
+    void (async () => {
+      let token = adminAccessToken;
+      if (!token && isOwner && supabase) {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        token = data.session?.access_token || null;
+      }
+      if (!token) throw new Error('Owner session expired. Please unlock the admin panel again.');
+      const mediaUrl = await uploadStoreMediaWithAdminToken(file, token);
+      onComplete(mediaUrl, file);
+    })()
       .catch((error: unknown) => {
         showNotification(error instanceof Error ? error.message : 'Media upload failed.');
       })
@@ -109,6 +140,10 @@ export const MediaStudioSection: React.FC<MediaStudioSectionProps> = ({
       showNotification('Please upload a file or enter an image/video URL first!');
       return;
     }
+    if (uploadTarget === 'product' && (!uploadTitle.trim() || !Number.isSafeInteger(uploadPrice) || uploadPrice < 1)) {
+      showNotification('Enter the real product name and selling price before creating a product.');
+      return;
+    }
 
     if (uploadTarget === 'murti') {
       updateSiteAssets({
@@ -117,57 +152,61 @@ export const MediaStudioSection: React.FC<MediaStudioSectionProps> = ({
       });
       showNotification('🕉️ Uploaded & dynamically synced with 3D Hero Ganpati Murti!');
     } else if (uploadTarget === 'gallery') {
+      if (!uploadTitle.trim()) {
+        showNotification('Add a clear title for this gallery upload before saving.');
+        return;
+      }
       addGalleryItem({
-        title: uploadTitle.trim() || 'Sacred Devotional Darshan',
+        title: uploadTitle.trim(),
         type: uploadMediaKind,
         url: uploadUrl,
         thumbnailUrl: uploadUrl,
         category: (uploadCategory as any) || 'ganpati_darshan',
-        tags: ['New Upload', 'Sacred', 'Darshan'],
-        location: uploadLocation || 'India',
+        tags: ['Store Upload'],
+        location: uploadLocation.trim() || undefined,
         videoDuration: uploadMediaKind === 'video' ? uploadDuration : undefined
       });
-      showNotification(`📷 Added "${uploadTitle || 'Media'}" to 1,000+ Gallery!`);
+      showNotification(`📷 Added "${uploadTitle.trim()}" to Photo & Video Gallery!`);
     } else if (uploadTarget === 'product') {
-      const prodName = uploadTitle.trim() || 'Divine Swarna Mala';
+      const prodName = uploadTitle.trim();
       addProduct({
         id: `mala-${Date.now()}`,
         name: prodName,
         hindiName: `${prodName} माला`,
         marathiName: `${prodName} माळ`,
-        category: (uploadCategory as any) || 'festive',
-        price: uploadPrice || 599,
-        originalPrice: Math.round((uploadPrice || 599) * 1.35),
-        discountPercent: 25,
-        rating: 4.9,
-        reviewsCount: 1,
+        category: uploadCategory as Product['category'],
+        price: uploadPrice,
+        originalPrice: uploadPrice,
+        discountPercent: 0,
+        rating: 0,
+        reviewsCount: 0,
         image: uploadUrl,
         galleryImages: [uploadUrl],
-        tags: ['New Arrival', 'Handcrafted'],
-        flowers: ['Fresh Morning Blooms'],
-        description: 'Pristine divine garland lovingly handwoven for worship.',
-        hindiDescription: 'विशेष पूजा हेतु प्रातःकाल के ताजे पवित्र पुष्पों से निर्मित माला।',
-        availableSizes: [
-          { size: '16"', name: 'Small (16")', extraPrice: 0 },
-          { size: '22"', name: 'Medium (22")', extraPrice: 120 },
-          { size: '28"', name: 'Large (28")', extraPrice: 250 },
-          { size: '36"', name: 'XL (36")', extraPrice: 450 }
-        ],
-        freshnessHours: 72,
-        inStock: true,
-        fragranceLevel: 'Divine Sacred',
-        bestForDeity: 'Ganpati Bappa'
+        tags: [],
+        flowers: [],
+        description: 'Product details must be completed by the store owner before the item is available.',
+        hindiDescription: 'उत्पाद उपलब्ध होने से पहले स्टोर मालिक को सही विवरण जोड़ना होगा।',
+        availableSizes: [{ size: '16"', name: 'Size to be confirmed', extraPrice: 0 }],
+        freshnessHours: 0,
+        inStock: false,
+        stockQuantity: 0,
+        fragranceLevel: 'Subtle',
+        bestForDeity: 'Not specified'
       });
       showNotification(`🌺 Created new product: "${prodName}"!`);
     } else if (uploadTarget === 'video') {
-      const vidTitle = uploadTitle.trim() || 'Temple Aarti Darshan Video';
+      if (!uploadTitle.trim()) {
+        showNotification('Add a clear title for this video before saving.');
+        return;
+      }
+      const vidTitle = uploadTitle.trim();
       addVideoItem({
         id: `video-${Date.now()}`,
         title: vidTitle,
-        duration: uploadDuration || '2:15',
+        duration: uploadDuration.trim(),
         image: uploadUrl,
         videoUrl: uploadUrl,
-        category: 'Aarti & Unboxing'
+        category: 'Store Video'
       });
       showNotification(`🎬 Added new video: "${vidTitle}"!`);
     }
@@ -364,7 +403,9 @@ export const MediaStudioSection: React.FC<MediaStudioSectionProps> = ({
                       type="button"
                       key={target.id}
                       onClick={() => {
-                        setUploadTarget(target.id as any);
+                                        setUploadTarget(target.id as any);
+                        if (target.id === 'product') setUploadCategory('festive');
+                        else if (target.id === 'gallery') setUploadCategory('ganpati_darshan');
                         if (target.id === 'video') setUploadMediaKind('video');
                         else setUploadMediaKind('image');
                       }}
@@ -531,9 +572,14 @@ export const MediaStudioSection: React.FC<MediaStudioSectionProps> = ({
                     onChange={(e) => setUploadCategory(e.target.value)}
                     className="w-full p-2.5 rounded-xl bg-black/60 border border-white/20 text-white text-xs"
                   >
-                    <option value="festive">Festive Garland</option>
-                    <option value="traditional">Traditional Mala</option>
-                    <option value="premium">Premium Devotional</option>
+                    <option value="rose">Rose Mala</option>
+                    <option value="mogra">Mogra Mala</option>
+                    <option value="marigold">Marigold Mala</option>
+                    <option value="orchid">Orchid Mala</option>
+                    <option value="tulsi">Tulsi Mala</option>
+                    <option value="temple">Temple Mala</option>
+                    <option value="wedding">Wedding Mala</option>
+                    <option value="festive">Festive Mala</option>
                   </select>
                 </div>
               </div>

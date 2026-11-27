@@ -15,7 +15,6 @@ import {
   X,
   Share2,
   PlusCircle,
-  Layers,
   MapPin,
   Calendar,
   Download,
@@ -29,7 +28,6 @@ export const GallerySection: React.FC = () => {
     galleryItems,
     isOwner,
     deleteGalleryItem,
-    bulkSeed1000Items,
     setIsAdminOpen,
     showNotification,
     updateSiteAssets,
@@ -95,28 +93,18 @@ export const GallerySection: React.FC = () => {
           <div>
             <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold uppercase tracking-wider mb-2">
               <Sparkles className="w-3.5 h-3.5 text-[#E5C158]" />
-              <span>Sacred Darshan & UGC Archive</span>
+              <span>Store Photo & Video Gallery</span>
             </div>
             <h2 className="font-cinzel text-3xl sm:text-4xl font-extrabold text-white">
-              Devotional Gallery & Darshan Archive
+              Photo & Video Gallery
             </h2>
             <p className="font-playfair italic text-xs sm:text-sm text-amber-200/80 mt-1 max-w-2xl">
-              Explore over 1,000+ divine garland darshans, unboxings, temple rituals, and handcrafted artisan stories from devotees across India.
+              Browse the media currently listed in the store gallery. Check each item's details for its source and context.
             </p>
           </div>
 
-          {/* Quick Actions (Admin Add & 1000+ Generator) */}
+          {/* Store owners can add genuine uploaded photos and videos */}
           <div className="flex flex-wrap items-center gap-2">
-            {isOwner && galleryItems.length < 500 && (
-              <button
-                onClick={bulkSeed1000Items}
-                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-700/20 border border-amber-400/40 text-amber-300 text-xs font-bold hover:bg-amber-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                <Layers className="w-3.5 h-3.5" />
-                <span>Load 1,000+ Sacred Media</span>
-              </button>
-            )}
-
             {isOwner && (
               <button
                 onClick={() => setIsAdminOpen(true)}
@@ -204,8 +192,12 @@ export const GallerySection: React.FC = () => {
         {visibleItems.length === 0 ? (
           <div className="text-center py-16 text-gray-400 space-y-2">
             <Camera className="w-10 h-10 text-amber-500/50 mx-auto" />
-            <p className="text-sm font-semibold text-gray-200">No media found matching your filter</p>
-            <p className="text-xs">Try selecting a different category or clear search query.</p>
+            <p className="text-sm font-semibold text-gray-200">
+              {galleryItems.length === 0 ? 'No photos or videos have been uploaded yet' : 'No media found matching your filter'}
+            </p>
+            <p className="text-xs">
+              {galleryItems.length === 0 ? 'Photos and videos will appear here after they are added to the gallery.' : 'Try selecting a different category or clear search query.'}
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">

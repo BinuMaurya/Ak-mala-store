@@ -284,7 +284,7 @@ export const ProductDetailModal: React.FC = () => {
                     <p className="text-xs font-bold text-white">{review.title}</p>
                     <p className="text-[10px] text-gray-400 mt-0.5">{review.author}{review.city ? ` · ${review.city}` : ''}</p>
                   </div>
-                  <span className="text-[9px] text-emerald-300 whitespace-nowrap">Verified purchase</span>
+                  {review.verifiedDevotee === true && <span className="text-[9px] text-emerald-300 whitespace-nowrap">Verified purchase</span>}
                 </div>
                 <p className="text-xs text-gray-300 mt-2">{review.comment}</p>
                 {review.photoUrl && (
@@ -298,12 +298,16 @@ export const ProductDetailModal: React.FC = () => {
               <span className="text-3xl font-black text-[#F3E5AB]">
                 ₹{calculatedPrice}
               </span>
-              <span className="text-sm text-gray-400 line-through">
-                ₹{calculatedOriginal}
-              </span>
-              <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                {product.discountPercent}% OFF
-              </span>
+              {product.discountPercent > 0 && calculatedOriginal > calculatedPrice && (
+                <span className="text-sm text-gray-400 line-through">
+                  ₹{calculatedOriginal}
+                </span>
+              )}
+              {product.discountPercent > 0 && (
+                <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                  {product.discountPercent}% OFF
+                </span>
+              )}
             </div>
 
             {/* SELECT SIZE */}

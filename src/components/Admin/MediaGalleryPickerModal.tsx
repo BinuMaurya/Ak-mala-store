@@ -8,7 +8,6 @@ import {
   Video,
   Check,
   CheckCircle2,
-  Sparkles,
   Layers,
   Filter,
   ExternalLink,
@@ -31,11 +30,11 @@ export const MediaGalleryPickerModal: React.FC<MediaGalleryPickerModalProps> = (
   onClose,
   onSelect,
   title = 'Select Media from Sacred Gallery',
-  subtitle = 'Choose from 1,000+ high-definition photos and devotional videos',
+  subtitle = 'Choose from media currently listed in the store gallery',
   allowedType = 'all',
   currentSelectedUrl = ''
 }) => {
-  const { galleryItems, bulkSeed1000Items, showNotification } = useApp();
+  const { galleryItems, showNotification } = useApp();
 
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [mediaType, setMediaType] = useState<'all' | 'image' | 'video'>(allowedType);
@@ -115,16 +114,6 @@ export const MediaGalleryPickerModal: React.FC<MediaGalleryPickerModalProps> = (
           </div>
 
           <div className="flex items-center gap-2">
-            {galleryItems.length < 500 && (
-              <button
-                onClick={bulkSeed1000Items}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold hover:bg-amber-500/20"
-                title="Populate 1000 gallery media items"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Load 1,000+ Items</span>
-              </button>
-            )}
 
             <button
               onClick={onClose}
@@ -252,13 +241,7 @@ export const MediaGalleryPickerModal: React.FC<MediaGalleryPickerModalProps> = (
             <div className="py-16 text-center text-gray-400 space-y-3">
               <Layers className="w-10 h-10 text-amber-500/50 mx-auto" />
               <p className="text-sm font-semibold text-gray-200">No media items found</p>
-              <p className="text-xs">Try selecting another category or click "Load 1,000+ Items".</p>
-              <button
-                onClick={bulkSeed1000Items}
-                className="mt-2 px-4 py-2 rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black font-bold text-xs uppercase"
-              >
-                Populate 1,000 Items
-              </button>
+              <p className="text-xs">Add photos or videos in Media Studio, then return here to select them.</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">

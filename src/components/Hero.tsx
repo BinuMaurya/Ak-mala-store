@@ -34,7 +34,7 @@ export const Hero: React.FC = () => {
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-amber-500/15 via-[#D4AF37]/20 to-amber-700/15 border border-[#D4AF37]/40 w-fit mx-auto lg:mx-0 shadow-sm">
               <span className="text-sm">🪔</span>
               <span className="text-xs font-bold text-[#E5C158] uppercase tracking-wider">
-                100% Shuddh & Sacred Malas
+                Devotional Mala Collection
               </span>
               <span className="flex h-2 w-2 relative">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
@@ -58,10 +58,10 @@ export const Hero: React.FC = () => {
             {/* Feature Badges 2x2 grid */}
             <div className="grid grid-cols-2 gap-2.5 pt-1 text-left">
               {[
-                { title: t('heroBadge1'), desc: 'Traditional Karigari', icon: HeartHandshake },
-                { title: t('heroBadge2'), desc: 'Dawn Plucked Blooms', icon: Flower2 },
-                { title: t('heroBadge3'), desc: 'Zero Wilting Packaging', icon: Truck },
-                { title: t('heroBadge4'), desc: 'Sacred Sanctity Guarantee', icon: ShieldCheck },
+                { title: 'Design Variety', desc: 'Explore available mala styles', icon: HeartHandshake },
+                { title: 'Color Choices', desc: 'Choose from available colors', icon: Flower2 },
+                { title: 'Order Updates', desc: 'Check tracking after ordering', icon: Truck },
+                { title: 'Customer Support', desc: 'Help with store and delivery questions', icon: ShieldCheck },
               ].map((badge, idx) => {
                 const Icon = badge.icon;
                 return (
