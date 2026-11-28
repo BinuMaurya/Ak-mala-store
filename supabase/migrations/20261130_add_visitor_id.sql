@@ -1,0 +1,8 @@
+-- 20261130_add_visitor_id.sql
+-- Visitor-ID (uuid) – nullable ???, ?? ??? ??? NOT NULL ??? ???? ???
+alter table public.analytics_events
+  add column if not exists visitor_id uuid;
+
+-- ???? ??? ?? ???? optional index
+create index if not exists analytics_events_visitor_id_idx
+  on public.analytics_events (visitor_id);
